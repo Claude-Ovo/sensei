@@ -106,9 +106,14 @@ export class Brain {
     const prevSeq = this.lastObservedSeq;
     this.lastObservedSeq = win.toSeq;
     try {
-      // 便宜的守门员先看一眼：纯噪音就别惊动大模型
-      if (this.triage?.available && reason !== 'reply' && reason !== 'replay-final') {
-        const slice = this.transcript.since(prevSeq);
+      // 三级门：本地正则（免费）→ Gemma 分诊（便宜）→ Observer（贵）
+      const slice = this.transcript.since(prevSeq);
+      const local = quickSignal(slice);
+      if (local === 'skip' && reason !== 'reply' && reason !== 'replay-final') {
+        this.o.log.append('meta', 'triage', { attention: 'none', kind: 'noise', summary: 'local: prompt-only/empty' , by: 'regex' });
+        return null;
+      }
+      if (local === 'ambiguous' && this.triage?.available && reason !== 'reply' && reason !== 'replay-final') {
         const tri = await this.triage.classify(slice);
         if (tri) {
           this.triages++;
@@ -320,6 +325,24 @@ export class Brain {
   async shutdown(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
   }
+}
+
+/**
+ * 免费的本地信号：
+ * - 'skip'      新内容只有 prompt 回显/空白 → 谁都不用叫
+ * - 'error'     出现明显报错特征 → 直接叫 Observer（别浪费一轮分诊）
+ * - 'ambiguous' 其他 → 让 Gemma 先看
+ */
+export function quickSignal(slice: string): 'skip' | 'error' | 'ambiguous' {
+  const meaningful = slice
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !/^(PS |[$#>]\s*$|\$ ?$|>>\s*$)/.test(l) && !/^(PS )?~?[\w:\\/.\- ]*>\s*$/.test(l));
+  if (meaningful.length === 0) return 'skip';
+  const text = meaningful.join('\n');
+  if (/\[user → sensei\]/.test(text)) return 'error';
+  if (/\b(error|fatal|exception|traceback|panic|denied|not found|no such file|cannot|can't|failed|failure|unrecognized|not recognized|command not found|ENOENT|EACCES|EADDRINUSE|npm ERR!|SyntaxError|TypeError|ReferenceError|segfault|exit code [1-9])\b/i.test(text)) return 'error';
+  return 'ambiguous';
 }
 
 function publicProfile(p: LearnerProfile) {

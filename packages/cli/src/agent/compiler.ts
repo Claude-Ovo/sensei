@@ -2,7 +2,7 @@ import { LlmAgent } from '@google/adk';
 import type { SenseiConfig } from '../lib/config.js';
 import type { LearnerProfile } from '../lib/profile.js';
 import { describeProfile } from '../lib/profile.js';
-import { makeModel, runOnce } from './llm.js';
+import { fallbackModels, makeModel, runOnce } from './llm.js';
 
 /**
  * Compiler：会话结束时，把整段挣扎改写成一份能给别人看的教程。
@@ -35,7 +35,7 @@ export interface CompilerInput {
 
 export class Compiler {
   private agent: LlmAgent;
-  constructor(cfg: SenseiConfig) {
+  constructor(private readonly cfg: SenseiConfig) {
     this.agent = new LlmAgent({
       name: 'sensei_compiler',
       description: 'Compiles a terminal learning session into a tutorial.',
@@ -61,7 +61,7 @@ export class Compiler {
       input.transcript,
       '>>>',
     ].join('\n');
-    const { text } = await runOnce(this.agent, message);
+    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg });
     return text.replace(/^```(?:markdown|md)?\s*/i, '').replace(/```\s*$/i, '').trim();
   }
 }

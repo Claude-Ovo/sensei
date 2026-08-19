@@ -2,7 +2,7 @@ import { LlmAgent } from '@google/adk';
 import type { SenseiConfig } from '../lib/config.js';
 import type { LearnerProfile } from '../lib/profile.js';
 import { describeProfile } from '../lib/profile.js';
-import { makeModel, runOnce } from './llm.js';
+import { fallbackModels, makeModel, runOnce } from './llm.js';
 
 /**
  * Coach：学习者主动开口（sensei ask "..."）时回答。
@@ -27,7 +27,7 @@ export interface CoachInput {
 
 export class Coach {
   private agent: LlmAgent;
-  constructor(cfg: SenseiConfig) {
+  constructor(private readonly cfg: SenseiConfig) {
     this.agent = new LlmAgent({
       name: 'sensei_coach',
       description: 'Answers learner questions in context of their terminal session.',
@@ -51,7 +51,7 @@ export class Coach {
       ...input.history.slice(-8).map((h) => `${h.role === 'user' ? 'Learner' : 'Sensei'}: ${h.text}`),
       `Learner asks now: ${input.question}`,
     ].join('\n');
-    const { text } = await runOnce(this.agent, message);
+    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg });
     return text.trim();
   }
 }

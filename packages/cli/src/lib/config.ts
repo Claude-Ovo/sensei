@@ -45,7 +45,7 @@ export function loadConfig(): SenseiConfig {
   return {
     geminiApiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
     model: process.env.SENSEI_MODEL || 'gemini-3.7-flash',
-    cheapModel: process.env.SENSEI_CHEAP_MODEL || 'gemma-3-27b-it',
+    cheapModel: process.env.SENSEI_CHEAP_MODEL || 'gemma-4-26b-a4b-it',
     serviceAccountPath,
     projectId,
     proxy,

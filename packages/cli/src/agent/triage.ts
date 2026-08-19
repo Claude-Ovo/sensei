@@ -36,6 +36,7 @@ export class Triage {
   private ai: GoogleGenAI;
   private model: string;
   private disabledUntil = 0;
+  private warned = false;
   constructor(cfg: SenseiConfig) {
     installProxy(cfg);
     if (!cfg.geminiApiKey) throw new Error('GEMINI_API_KEY missing');
@@ -49,24 +50,36 @@ export class Triage {
 
   async classify(slice: string): Promise<TriageResult | null> {
     if (!this.available) return null;
-    try {
-      const res = await this.ai.models.generateContent({
-        model: this.model,
-        contents: [{ role: 'user', parts: [{ text: PROMPT.replace('{slice}', slice.slice(-6000)) }] }],
-        config: { temperature: 0.1, maxOutputTokens: 200 },
-      });
-      const parsed = extractJson<Partial<TriageResult>>(res.text ?? '');
-      if (!parsed || !parsed.attention) return null;
-      const attention = (['none', 'low', 'high'] as const).includes(parsed.attention as never) ? parsed.attention : 'low';
-      const kind = (['noise', 'progress', 'error', 'success', 'question', 'idle'] as const).includes(parsed.kind as never)
-        ? parsed.kind!
-        : 'progress';
-      return { attention, kind, summary: String(parsed.summary ?? '').slice(0, 300) };
-    } catch (e) {
-      // 便宜模型挂了就退回直接观察，5 分钟后再试
-      this.disabledUntil = Date.now() + 5 * 60 * 1000;
-      process.stderr.write(`\n[sensei] triage (${this.model}) unavailable, falling back to observer: ${String((e as Error).message).slice(0, 100)}\n`);
-      return null;
+    let lastErr = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await this.ai.models.generateContent({
+          model: this.model,
+          contents: [{ role: 'user', parts: [{ text: PROMPT.replace('{slice}', slice.slice(-6000)) }] }],
+          config: { temperature: 0.1, maxOutputTokens: 400 },
+        });
+        // Gemma 4 会带 thought part；只取非 thought 的文本
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        const text = parts.filter((p) => !(p as { thought?: boolean }).thought && typeof p.text === 'string').map((p) => p.text).join('') || res.text || '';
+        const parsed = extractJson<Partial<TriageResult>>(text);
+        if (!parsed || !parsed.attention) return null;
+        const attention = (['none', 'low', 'high'] as const).includes(parsed.attention as never) ? parsed.attention : 'low';
+        const kind = (['noise', 'progress', 'error', 'success', 'question', 'idle'] as const).includes(parsed.kind as never)
+          ? parsed.kind!
+          : 'progress';
+        return { attention, kind, summary: String(parsed.summary ?? '').slice(0, 300) };
+      } catch (e) {
+        lastErr = String((e as Error).message);
+        if (!/high demand|overloaded|429|503|UNAVAILABLE|fetch failed|ECONNRESET/i.test(lastErr)) break;
+        await new Promise((r) => setTimeout(r, 800));
+      }
     }
+    // 便宜模型不可用就退回直接观察，5 分钟后再试
+    this.disabledUntil = Date.now() + 5 * 60 * 1000;
+    if (!this.warned) {
+      this.warned = true;
+      process.stderr.write(`\n[sensei] triage (${this.model}) unavailable, observer will look directly: ${lastErr.slice(0, 100)}\n`);
+    }
+    return null;
   }
 }

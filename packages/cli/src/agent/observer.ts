@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { SenseiConfig } from '../lib/config.js';
 import type { LearnerProfile } from '../lib/profile.js';
 import { describeProfile } from '../lib/profile.js';
-import { extractJson, makeModel, runOnce } from './llm.js';
+import { extractJson, fallbackModels, makeModel, runOnce } from './llm.js';
 
 /**
  * Observer：后台观察者。看最近的终端流，判断学习者状态，决定要不要开口。
@@ -67,14 +67,15 @@ export interface ObserverInput {
 
 export class Observer {
   private agent: LlmAgent;
-  constructor(cfg: SenseiConfig) {
+  constructor(private readonly cfg: SenseiConfig) {
     this.agent = new LlmAgent({
       name: 'sensei_observer',
       description: 'Watches a learner terminal session and decides whether to coach.',
       model: makeModel(cfg),
       instruction: INSTRUCTION,
       outputSchema: ObservationSchema,
-      generateContentConfig: { temperature: 0.3 },
+      // 观察是高频、低延迟的判断：不让模型长考（thinkingBudget 0），准确度靠证据在 prompt 里
+      generateContentConfig: { temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } },
     });
   }
 
@@ -93,7 +94,7 @@ export class Observer {
       input.transcript,
       '>>>',
     ].join('\n');
-    const { text } = await runOnce(this.agent, message);
+    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg });
     const parsed = extractJson<unknown>(text);
     if (!parsed) return null;
     const res = ObservationSchema.safeParse(parsed);

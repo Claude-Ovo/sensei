@@ -38,7 +38,7 @@
 - Beyond chat loop：Observer 是后台异步的，用户不主动问也会被点拨。
 
 ## 三件套对应
-- Gemini：`gemini-3.7-flash`（Observer/Coach/Compiler），`gemma-3-27b-it`（二次脱敏/分类，加分）
+- Gemini：`gemini-3.7-flash`（Observer/Coach/Compiler），`gemma-4-26b-a4b-it`（二次脱敏/分类，加分）
 - 框架：`@google/adk`（LlmAgent + FunctionTool + Runner）
 - Google Cloud：Cloud Firestore（全部持久化 + 实时）、Firebase Hosting（面板）；可选 Cloud Run（README 里给部署脚本）
 
