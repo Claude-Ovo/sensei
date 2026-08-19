@@ -1,0 +1,20 @@
+{
+  "name": "sensei",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sensei — an agent that watches you learn a tool in the terminal, coaches you step by step, takes notes, and turns your struggle into a tutorial.",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:server": "npm -w @sensei/server run dev",
+    "dev:web": "npm -w @sensei/web run dev",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
