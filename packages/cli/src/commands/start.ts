@@ -4,56 +4,101 @@ import { Chunker } from '../lib/chunker.js';
 import { cleanTerminal } from '../lib/ansi.js';
 import { makeRedactor } from '../lib/redact.js';
 import { LocalSessionLog, newSessionId } from '../lib/session.js';
+import { loadConfig } from '../lib/config.js';
+import { CloudStore } from '../lib/cloud.js';
+import { Brain } from '../lib/brain.js';
+import { startIpc, clearCurrent } from '../lib/ipc.js';
 
 export interface StartOptions {
   shell?: string;
   goal?: string;
   quiet?: boolean;
+  offline?: boolean;
+  noAgent?: boolean;
 }
 
 function defaultShell(): string {
-  if (process.platform === 'win32') {
-    return process.env.SENSEI_SHELL || 'powershell.exe';
-  }
+  if (process.platform === 'win32') return process.env.SENSEI_SHELL || 'powershell.exe';
   return process.env.SENSEI_SHELL || process.env.SHELL || '/bin/bash';
 }
 
+const LEVEL_STYLE: Record<string, (s: string) => string> = {
+  nudge: chalk.cyan,
+  hint: chalk.cyan,
+  explain: chalk.cyan,
+  fix: chalk.green,
+  milestone: chalk.green,
+  question: chalk.yellow,
+  error: chalk.red,
+  info: chalk.dim,
+};
+
 export async function start(opts: StartOptions) {
+  const cfg = loadConfig();
   const shell = opts.shell || defaultShell();
   const sessionId = newSessionId();
   const log = new LocalSessionLog(sessionId);
-  const redact = makeRedactor([process.env.GEMINI_API_KEY || '', process.env.SENSEI_TOKEN || '']);
+  const redact = makeRedactor([cfg.geminiApiKey || '', process.env.SENSEI_TOKEN || '']);
 
   const cols = process.stdout.columns || 100;
   const rows = process.stdout.rows || 30;
   const shellArgs = /powershell|pwsh/i.test(shell) ? ['-NoLogo'] : [];
+
+  // 云端镜像（可关）
+  const cloud = !opts.offline && cfg.cloudEnabled ? new CloudStore(cfg, sessionId) : undefined;
+
+  // 往真实终端里插一行：先回车到行首，打完再空一行，尽量不糊掉用户正在敲的 prompt
+  const say = (text: string, level = 'info') => {
+    const paint = LEVEL_STYLE[level] ?? chalk.cyan;
+    const prefix = level === 'question' ? '[sensei ?]' : level === 'milestone' ? '[sensei ✓]' : '[sensei]';
+    const body = text
+      .split('\n')
+      .map((l, i) => (i === 0 ? `${paint(prefix)} ${l}` : `${' '.repeat(prefix.length + 1)}${l}`))
+      .join('\r\n');
+    process.stderr.write(`\r\n${body}\r\n`);
+  };
+
+  const brain = new Brain({
+    cfg,
+    sessionId,
+    goal: opts.goal ?? null,
+    log,
+    say,
+    cloud,
+    quietObserver: !!opts.noAgent,
+  });
+
+  const { info, server } = await startIpc(sessionId, (route, body) => brain.handle(route, body));
 
   const term = pty.spawn(shell, shellArgs, {
     name: 'xterm-256color',
     cols,
     rows,
     cwd: process.cwd(),
-    env: { ...process.env, SENSEI_SESSION: sessionId, SENSEI_ACTIVE: '1' } as Record<string, string>,
+    env: {
+      ...process.env,
+      SENSEI_SESSION: sessionId,
+      SENSEI_ACTIVE: '1',
+      SENSEI_PORT: String(info.port),
+      SENSEI_TOKEN: info.token,
+    } as Record<string, string>,
   });
 
-  log.append('meta', 'session.start', {
-    shell,
-    cwd: process.cwd(),
-    platform: process.platform,
-    goal: opts.goal ?? null,
-  });
+  const startMeta = { shell, cwd: process.cwd(), platform: process.platform, goal: opts.goal ?? null };
+  log.append('meta', 'session.start', startMeta);
+  cloud?.start({ ...startMeta, learnerId: brain.profile.id });
 
-  // 输出流：镜像到真实终端 + 清洗/脱敏后进日志
+  // 输出流：镜像到真实终端 + 清洗/脱敏后进日志和大脑
   const outChunker = new Chunker((raw) => {
     const text = redact(cleanTerminal(raw));
-    if (text.trim()) log.append('out', text);
+    if (text.trim()) brain.ingest(log.append('out', text));
   });
   term.onData((d) => {
     process.stdout.write(d);
     outChunker.push(d);
   });
 
-  // 输入流：透传给 pty，同时按行记录用户敲的命令（回车触发）
+  // 输入流：透传给 pty，同时按行记录用户敲的命令
   let lineBuf = '';
   const stdin = process.stdin;
   if (stdin.isTTY) stdin.setRawMode(true);
@@ -65,12 +110,12 @@ export async function start(opts: StartOptions) {
       if (ch === '\r' || ch === '\n') {
         const cmd = lineBuf.trim();
         lineBuf = '';
-        if (cmd) log.append('in', redact(cmd));
+        if (cmd) brain.ingest(log.append('in', redact(cmd)));
       } else if (ch === '\x7f' || ch === '\b') {
         lineBuf = lineBuf.slice(0, -1);
       } else if (ch === '\x03') {
         lineBuf = '';
-        log.append('meta', 'ctrl-c');
+        brain.ingest(log.append('meta', 'ctrl-c'));
       } else if (ch >= ' ') {
         lineBuf += ch;
       }
@@ -82,21 +127,36 @@ export async function start(opts: StartOptions) {
   });
 
   if (!opts.quiet) {
-    process.stderr.write(
-      chalk.dim(`\n[sensei] watching · session ${sessionId}\n[sensei] log → ${log.file}\n`) +
-        (opts.goal ? chalk.dim(`[sensei] goal: ${opts.goal}\n`) : '') +
-        chalk.dim(`[sensei] type "exit" to finish\n\n`),
-    );
+    const lines = [
+      `[sensei] watching · session ${sessionId}`,
+      `[sensei] log → ${log.file}`,
+      opts.goal ? `[sensei] goal: ${opts.goal}` : `[sensei] no goal given — I'll infer it (or: sensei start -g "what you're learning")`,
+      cloud ? `[sensei] cloud: on (${cfg.projectId})` : `[sensei] cloud: off`,
+      brain.llmReady ? `[sensei] agent: ${cfg.model}` : `[sensei] agent: OFF — ${brain.llmProblem}`,
+      `[sensei] in this shell: sensei ask "…" · sensei reply "…" · sensei note "…" · sensei fb too-basic|confusing|just-tell-me|let-me-try · sensei done`,
+      `[sensei] type "exit" to finish`,
+    ];
+    process.stderr.write(chalk.dim('\n' + lines.join('\n') + '\n\n'));
   }
 
   await new Promise<void>((resolve) => {
-    term.onExit(({ exitCode }) => {
+    term.onExit(async ({ exitCode }) => {
       outChunker.flush();
       log.append('meta', 'session.end', { exitCode });
       if (stdin.isTTY) stdin.setRawMode(false);
       stdin.pause();
+      await brain.shutdown();
+      server.close();
+      clearCurrent(sessionId);
+      cloud?.end(exitCode);
+      await cloud?.terminate();
       if (!opts.quiet) {
-        process.stderr.write(chalk.dim(`\n[sensei] session ${sessionId} closed (exit ${exitCode})\n`));
+        process.stderr.write(
+          chalk.dim(
+            `\n[sensei] session ${sessionId} closed (exit ${exitCode}) · notes ${brain.notes.length} · hints ${brain.hintsGiven.length} · milestones ${brain.milestones.length}\n` +
+              (brain.notes.length ? `[sensei] tip: run \`sensei done ${sessionId}\` next time BEFORE exiting to compile the tutorial\n` : ''),
+          ),
+        );
       }
       resolve();
     });
