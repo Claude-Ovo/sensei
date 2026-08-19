@@ -23,8 +23,8 @@ Sensei 是一个坐在你终端旁边的师父：看你真实的操作流（stdo
 | 日期 | 目标 | 验收 |
 |---|---|---|
 | 8/19 三 | 选题定 A；repo 起架子；node-pty 验证通过；Devpost 报名；Firebase 项目建好（Firestore + Hosting） | ✅ `sensei start` 包住 PowerShell、输出流脱敏后写本地 JSONL |
-| 8/20 四 | CLI 接 Firestore（chunks 实时上云）；Observer agent（ADK + gemini-3.7-flash）后台循环跑起来 | 终端里敲错命令，几秒后 agent 的判断出现在日志/Firestore |
-| 8/21 五 | 核心闭环：agent 提示 → CLI 内联显示；`sensei ask/reply`；notes 落 Firestore | 一次完整"卡住→被点拨→走通"演示 |
+| 8/20 四 | ✅（8/19 提前完成）CLI 接 Firestore；Observer/Coach/Compiler 三 agent 真跑通；Gemma 分诊门；面板 v0 上线 sensei-agent.web.app | 终端里敲错命令，几秒后 agent 开口；replay/compile 可离线复现 |
+| 8/21 五 | 逸晨亲手试用 + 吐槽；按反馈修 prompt/体验；面板 hallmark 审美审计；架构图 SVG（artifact-diagramming） | 一次完整"卡住→被点拨→走通"的真人演示录屏素材 |
 | 8/22 六 | web 面板 v0：实时日志、笔记、问答、反馈按钮 | 浏览器里看到会话 |
 | 8/23 日 | 学习者画像 + 反馈环（"太基础/看不懂/我其实这么想"→ 调整语气与粒度） | 同一个错误，反馈前后提示明显不同 |
 | 8/24 一 | `sensei done`：把会话编译成教程（Markdown，含踩坑清单）+ Douyin 口播稿 | 一份能发的教程 |
