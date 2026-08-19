@@ -168,7 +168,9 @@ export async function start(opts: StartOptions) {
       `[sensei] log → ${log.file}`,
       opts.goal ? `[sensei] goal: ${opts.goal}` : `[sensei] no goal given — I'll infer it (or: sensei start -g "what you're learning")`,
       cloud ? `[sensei] cloud: on (${cfg.projectId})${opts.public ? ' · PUBLIC session' : ''}` : `[sensei] cloud: off`,
-      brain.llmReady ? `[sensei] agent: ${cfg.model}` : `[sensei] agent: OFF — ${brain.llmProblem}`,
+      brain.llmReady
+        ? `[sensei] agent: observer ${cfg.observerModel} · coach/compiler ${cfg.model} · triage ${cfg.cheapModel}`
+        : `[sensei] agent: OFF — ${brain.llmProblem}`,
       `[sensei] in this shell: sensei ask "…" · sensei reply "…" · sensei note "…" · sensei fb too-basic|confusing|just-tell-me|let-me-try · sensei done`,
       `[sensei] type "exit" to finish`,
     ];
