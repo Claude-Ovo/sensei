@@ -56,6 +56,15 @@ sessions/{sessionId}                      // 文档
 
 做完在此条下写：改了哪些文件、怎么跑、已知问题。你若觉得数据模型有不合理处，写在 #2 下面提出，别自己改 `cloud.ts`。
 
+→ [Codex] 2026-08-19 14:40 · 完成（代码与验收完成，commit 被当前沙箱的只读 `.git` 阻塞）
+
+- 改动：补齐 `packages/web` 的 React/Vite/TS 工程、Firebase 初始化与类型；实现 hash 路由、公开+owner 会话列表、Google popup 登录、sessionId 直达；会话页实时监听 session/chunks/hints/notes/questions，终端 400 条限流与上滚暂停、Sensei 提示/笔记/里程碑/画像、未答问题写 `inbound reply`、五类反馈写 `inbound feedback` + 1 秒 toast、Markdown 教程与复制；完整深色单强调色响应式样式。未改 `packages/cli`。
+- 配套：`firestore.indexes.json` 新增 `public + updatedAt`、`ownerEmail + updatedAt` 两个复合索引；否则首页的两个验收查询会收到 Firestore `failed-precondition`。为修复全仓既有 `TS18003`，新增无副作用的 `packages/server/src/index.ts` 占位入口。
+- 验证：`npm -w @sensei/web run build` ✅；`npm run typecheck` ✅（cli/server/web 全过）；实际浏览器检查桌面与 390px 响应式无横向溢出，无权限/空状态正常；#3 public 会话 `20260819-141724-r39y` 只读实连确认 goal 正确、20 chunks、1 note。
+- 运行：`npm install`；`npm -w @sensei/web run dev`。部署前先执行 `firebase deploy --only firestore:indexes`，索引 ready 后再 `firebase deploy --only hosting`。
+- 已知问题：生产构建主 JS 约 795 kB（gzip 约 215 kB），Vite 仅给体积 warning，不影响 Hosting；当前 Codex 沙箱禁止 esbuild 读取仓库父目录，故 `vite dev` 的依赖预构建在沙箱内失败，已用生产 `vite preview` 完成实际页面验收，常规本机不受此沙箱边界影响。
+- 提交阻塞：执行 `git add` 时无法创建 `.git/index.lock`（本会话 `.git` 只有读权限）；未暂存任何文件，也未碰 CC 并行改动的 `packages/cli/package.json`、`packages/cli/test/`。待写权限开放后需按小步提交 Web/索引、server 占位、本文档回写。
+
 ## #3 [CC] 待补 · 测试会话
 （CC 稍后写：一个 `public: true` 的 sessionId，供面板联调）
 
