@@ -49,15 +49,34 @@ export async function start(opts: StartOptions) {
   // 云端镜像（可关）
   const cloud = !opts.offline && cfg.cloudEnabled ? new CloudStore(cfg, sessionId) : undefined;
 
-  // 往真实终端里插一行：先回车到行首，打完再空一行，尽量不糊掉用户正在敲的 prompt
-  const say = (text: string, level = 'info') => {
+  // 往真实终端里插一行。规则：
+  // - 用户正在敲命令（lineBuf 非空）→ 先攒着，等他按下回车、命令回显之后再打，不糊他的输入行
+  // - 用户没在敲 → 立刻打，然后往 shell 送一个回车让它重画一个干净的 prompt
+  let lineBuf = '';
+  let termRef: pty.IPty | null = null;
+  const pendingSays: string[] = [];
+  const render = (text: string, level: string) => {
     const paint = LEVEL_STYLE[level] ?? chalk.cyan;
     const prefix = level === 'question' ? '[sensei ?]' : level === 'milestone' ? '[sensei ✓]' : '[sensei]';
-    const body = text
+    return text
       .split('\n')
       .map((l, i) => (i === 0 ? `${paint(prefix)} ${l}` : `${' '.repeat(prefix.length + 1)}${l}`))
       .join('\r\n');
+  };
+  const flushSays = () => {
+    if (!pendingSays.length) return;
+    process.stderr.write(`\r\n${pendingSays.join('\r\n')}\r\n`);
+    pendingSays.length = 0;
+  };
+  const say = (text: string, level = 'info') => {
+    const body = render(text, level);
+    if (lineBuf.length > 0) {
+      pendingSays.push(body);
+      return;
+    }
     process.stderr.write(`\r\n${body}\r\n`);
+    // 让 shell 重画 prompt（空行回车对任何 shell 都无害）
+    termRef?.write('\r');
   };
 
   const brain = new Brain({
@@ -107,7 +126,7 @@ export async function start(opts: StartOptions) {
   });
 
   // 输入流：透传给 pty，同时按行记录用户敲的命令
-  let lineBuf = '';
+  termRef = term;
   const stdin = process.stdin;
   if (stdin.isTTY) stdin.setRawMode(true);
   stdin.resume();
@@ -119,11 +138,15 @@ export async function start(opts: StartOptions) {
         const cmd = lineBuf.trim();
         lineBuf = '';
         if (cmd) brain.ingest(log.append('in', redact(cmd)));
+        // 命令已回显，攒着的提示现在打出来
+        setTimeout(flushSays, 60);
       } else if (ch === '\x7f' || ch === '\b') {
         lineBuf = lineBuf.slice(0, -1);
+        if (!lineBuf.length) setTimeout(flushSays, 60);
       } else if (ch === '\x03') {
         lineBuf = '';
         brain.ingest(log.append('meta', 'ctrl-c'));
+        setTimeout(flushSays, 60);
       } else if (ch >= ' ') {
         lineBuf += ch;
       }
