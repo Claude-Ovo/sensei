@@ -25,9 +25,17 @@ export function makeModel(cfg: SenseiConfig, model = cfg.model): Gemini {
   return new Gemini({ model, apiKey: cfg.geminiApiKey });
 }
 
-/** 主模型抖动/限流时的退路（都满足"Gemini 3.5 或更新"） */
-export function fallbackModels(cfg: SenseiConfig): string[] {
-  const list = [cfg.model, 'gemini-3.5-flash', 'gemini-flash-latest'];
+/**
+ * 模型分工（都满足"Gemini 3.5 或更新"）：
+ * - observer：高频、要快、免费额度要大 → 3.5 Flash-Lite 打头，3.7 Flash 兜底
+ * - coach / compiler：低频、要质量 → 3.7 Flash 打头，Lite 兜底
+ * 免费层 Flash 系列每天每模型只有 20 次，所以贵的留给真正需要的地方。
+ */
+export function fallbackModels(cfg: SenseiConfig, role: 'observer' | 'coach' | 'compiler' = 'coach'): string[] {
+  const list =
+    role === 'observer'
+      ? [cfg.observerModel, cfg.model, 'gemini-3.5-flash', 'gemini-flash-latest']
+      : [cfg.model, 'gemini-3.5-flash', cfg.observerModel, 'gemini-flash-latest'];
   return [...new Set(list)];
 }
 
@@ -43,8 +51,16 @@ export function orderModels(models: string[]): string[] {
   const bad = models.filter((m) => (penaltyUntil.get(m) ?? 0) > now);
   return [...ok, ...bad];
 }
-export function penalize(model: string): void {
-  penaltyUntil.set(model, Date.now() + PENALTY_MS);
+export function penalize(model: string, ms = PENALTY_MS): void {
+  penaltyUntil.set(model, Math.max(penaltyUntil.get(model) ?? 0, Date.now() + ms));
+}
+
+/** Gemini 免费层的每日配额在太平洋时间午夜重置 */
+export function msUntilPacificMidnight(now = new Date()): number {
+  const pacific = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  const next = new Date(pacific);
+  next.setHours(24, 0, 5, 0);
+  return Math.max(60_000, next.getTime() - pacific.getTime());
 }
 export function modelHealth(): Record<string, string> {
   const now = Date.now();
@@ -124,6 +140,14 @@ export async function runOnce(
       if (text) return { text, events, attempts, model, ms: Date.now() - t0 };
       lastErr = errorMessage ?? (ac.signal.aborted ? `timeout after ${timeoutMs}ms` : 'empty response');
       if (!RETRYABLE.test(lastErr)) break; // 非瞬时错误：换模型
+      if (/PerDay|per day|daily/i.test(lastErr) || (/quota/i.test(lastErr) && /exceeded/i.test(lastErr) && !/PerMinute/i.test(lastErr))) {
+        penalize(model, msUntilPacificMidnight()); // 今日免费额度用完：歇到太平洋时间午夜重置
+        break;
+      }
+      if (/PerMinute|per minute/i.test(lastErr)) {
+        penalize(model, 65_000);
+        break;
+      }
       if (/timeout|timed out|aborted|high demand|overloaded|503/i.test(lastErr)) {
         penalize(model);
         break; // 慢/满：别在这个模型上耗第二次

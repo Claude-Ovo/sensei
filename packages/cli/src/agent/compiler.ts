@@ -63,7 +63,7 @@ export class Compiler {
       input.transcript,
       '>>>',
     ].join('\n');
-    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg, timeoutMs: TIMEOUT_MS });
+    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg, 'compiler'), cfg: this.cfg, timeoutMs: TIMEOUT_MS });
     return text.replace(/^```(?:markdown|md)?\s*/i, '').replace(/```\s*$/i, '').trim();
   }
 }

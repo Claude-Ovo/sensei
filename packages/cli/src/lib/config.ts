@@ -23,6 +23,8 @@ export function loadDotEnv(): void {
 export interface SenseiConfig {
   geminiApiKey: string | undefined;
   model: string;
+  /** 高频观察用的轻模型（免费额度大、快） */
+  observerModel: string;
   cheapModel: string;
   serviceAccountPath: string;
   projectId: string | undefined;
@@ -45,6 +47,7 @@ export function loadConfig(): SenseiConfig {
   return {
     geminiApiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
     model: process.env.SENSEI_MODEL || 'gemini-3.7-flash',
+    observerModel: process.env.SENSEI_OBSERVER_MODEL || 'gemini-3.5-flash-lite',
     cheapModel: process.env.SENSEI_CHEAP_MODEL || 'gemma-4-26b-a4b-it',
     serviceAccountPath,
     projectId,

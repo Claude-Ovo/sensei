@@ -78,7 +78,7 @@ export class Observer {
     this.agent = new LlmAgent({
       name: 'sensei_observer',
       description: 'Watches a learner terminal session and decides whether to coach.',
-      model: makeModel(cfg),
+      model: makeModel(cfg, cfg.observerModel),
       instruction: INSTRUCTION,
       outputSchema: ObservationSchema,
       // 观察是高频、低延迟的判断：不让模型长考（thinkingBudget 0），准确度靠证据在 prompt 里
@@ -101,7 +101,7 @@ export class Observer {
       input.transcript,
       '>>>',
     ].join('\n');
-    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg, timeoutMs: TIMEOUT_MS });
+    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg, 'observer'), cfg: this.cfg, timeoutMs: TIMEOUT_MS });
     const parsed = extractJson<unknown>(text);
     if (!parsed) return null;
     const res = ObservationSchema.safeParse(parsed);
