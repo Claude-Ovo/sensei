@@ -35,6 +35,8 @@ export const ObservationSchema = z.object({
 });
 export type Observation = z.infer<typeof ObservationSchema>;
 
+const TIMEOUT_MS = 20_000;
+
 const INSTRUCTION = `You are Sensei, a patient senior engineer sitting next to a learner while they work in a terminal.
 You receive: the learner's goal, their profile, notes so far, the hints you already gave, and the most recent terminal transcript
 (lines starting with "$ " are commands they typed; other lines are what the terminal printed).
@@ -97,7 +99,7 @@ export class Observer {
       input.transcript,
       '>>>',
     ].join('\n');
-    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg });
+    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg, timeoutMs: TIMEOUT_MS });
     const parsed = extractJson<unknown>(text);
     if (!parsed) return null;
     const res = ObservationSchema.safeParse(parsed);

@@ -31,37 +31,74 @@ export function fallbackModels(cfg: SenseiConfig): string[] {
   return [...new Set(list)];
 }
 
+/**
+ * 断路器：某个模型刚刚超时/高负载，就先让它歇 10 分钟，直接从下一个开始。
+ * 用户在终端里等提示，延迟比"坚持用最新模型"重要。
+ */
+const penaltyUntil = new Map<string, number>();
+const PENALTY_MS = 10 * 60 * 1000;
+export function orderModels(models: string[]): string[] {
+  const now = Date.now();
+  const ok = models.filter((m) => (penaltyUntil.get(m) ?? 0) <= now);
+  const bad = models.filter((m) => (penaltyUntil.get(m) ?? 0) > now);
+  return [...ok, ...bad];
+}
+export function penalize(model: string): void {
+  penaltyUntil.set(model, Date.now() + PENALTY_MS);
+}
+export function modelHealth(): Record<string, string> {
+  const now = Date.now();
+  const out: Record<string, string> = {};
+  for (const [m, t] of penaltyUntil) if (t > now) out[m] = `resting ${Math.ceil((t - now) / 1000)}s`;
+  return out;
+}
+
 export interface RunResult {
   text: string;
   events: Event[];
   attempts: number;
   model: string;
+  ms: number;
 }
 
 export class LlmError extends Error {}
 
-const RETRYABLE = /high demand|overloaded|resource.?exhausted|429|503|UNAVAILABLE|deadline|timeout|ECONNRESET|fetch failed/i;
+const RETRYABLE = /high demand|overloaded|resource.?exhausted|429|503|UNAVAILABLE|deadline|timeout|timed out|aborted|ECONNRESET|fetch failed/i;
 
 /**
- * 一次性运行：不落会话，上下文全靠调用方拼进 message。
- * 空响应 / 限流 / 高负载：先退避重试，再换备用模型。
+ * 一次性运行：不落会话状态，上下文全靠调用方拼进 message。
+ * 每次尝试都有超时；超时/限流 → 记入断路器，换下一个模型。
  */
-export async function runOnce(agent: LlmAgent, message: string, opts: { userId?: string; models?: string[]; cfg?: SenseiConfig } = {}): Promise<RunResult> {
-  const models = opts.models ?? [typeof agent.model === 'string' ? agent.model : (agent.model as Gemini | undefined)?.model ?? 'gemini-3.7-flash'];
+export async function runOnce(
+  agent: LlmAgent,
+  message: string,
+  opts: { userId?: string; models?: string[]; cfg?: SenseiConfig; timeoutMs?: number } = {},
+): Promise<RunResult> {
+  const t0 = Date.now();
+  const configured = opts.models ?? [typeof agent.model === 'string' ? agent.model : (agent.model as Gemini | undefined)?.model ?? 'gemini-3.7-flash'];
+  const models = orderModels(configured);
+  const timeoutMs = opts.timeoutMs ?? 25_000;
   let attempts = 0;
   let lastErr: string | null = null;
   for (let mi = 0; mi < models.length; mi++) {
-    if (mi > 0 && opts.cfg) agent.model = makeModel(opts.cfg, models[mi]);
-    for (let retry = 0; retry < 3; retry++) {
+    const model = models[mi];
+    if (opts.cfg && model !== currentModelName(agent)) agent.model = makeModel(opts.cfg, model);
+    for (let retry = 0; retry < 2; retry++) {
       attempts++;
       const runner = new InMemoryRunner({ agent, appName: 'sensei' });
       const events: Event[] = [];
       let text = '';
       let errorMessage: string | undefined;
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs);
       try {
-        for await (const ev of runner.runEphemeral({
-          userId: opts.userId ?? 'sensei-user',
+        const userId = opts.userId ?? 'sensei-user';
+        const session = await runner.sessionService.createSession({ appName: 'sensei', userId });
+        for await (const ev of runner.runAsync({
+          userId,
+          sessionId: session.id,
           newMessage: { role: 'user', parts: [{ text: message }] },
+          abortSignal: ac.signal,
         })) {
           events.push(ev);
           if (ev.errorMessage) errorMessage = ev.errorMessage;
@@ -72,6 +109,8 @@ export async function runOnce(agent: LlmAgent, message: string, opts: { userId?:
         }
       } catch (e) {
         errorMessage = String((e as Error).message);
+      } finally {
+        clearTimeout(timer);
       }
       if (!text) {
         for (let i = events.length - 1; i >= 0; i--) {
@@ -82,15 +121,21 @@ export async function runOnce(agent: LlmAgent, message: string, opts: { userId?:
           }
         }
       }
-      if (text) return { text, events, attempts, model: models[mi] };
-      lastErr = errorMessage ?? 'empty response';
-      if (!RETRYABLE.test(lastErr)) break; // 非瞬时错误：不重试同一模型，直接试下一个
-      // 高负载/限流：同一模型只快速重试一次，然后换下一个模型（延迟比"死等"重要）
-      if (retry >= 1 && mi < models.length - 1) break;
-      await new Promise((r) => setTimeout(r, 700 * (retry + 1)));
+      if (text) return { text, events, attempts, model, ms: Date.now() - t0 };
+      lastErr = errorMessage ?? (ac.signal.aborted ? `timeout after ${timeoutMs}ms` : 'empty response');
+      if (!RETRYABLE.test(lastErr)) break; // 非瞬时错误：换模型
+      if (/timeout|timed out|aborted|high demand|overloaded|503/i.test(lastErr)) {
+        penalize(model);
+        break; // 慢/满：别在这个模型上耗第二次
+      }
+      await new Promise((r) => setTimeout(r, 600));
     }
   }
-  throw new LlmError(`LLM gave no usable response after ${attempts} attempts: ${lastErr}`);
+  throw new LlmError(`LLM gave no usable response after ${attempts} attempts (${Date.now() - t0}ms): ${lastErr}`);
+}
+
+function currentModelName(agent: LlmAgent): string | undefined {
+  return typeof agent.model === 'string' ? agent.model : (agent.model as Gemini | undefined)?.model;
 }
 
 /** 从模型输出里抠 JSON（容忍 ```json 围栏、思考前缀和前后废话） */

@@ -8,6 +8,8 @@ import { fallbackModels, makeModel, runOnce } from './llm.js';
  * Compiler：会话结束时，把整段挣扎改写成一份能给别人看的教程。
  * 输入是杂乱的终端流 + 笔记 + 里程碑 + 问答；输出是结构化 Markdown + 口播稿。
  */
+const TIMEOUT_MS = 120_000;
+
 const INSTRUCTION = `You are Sensei, turning one learner's real terminal session into a tutorial that someone else could follow.
 You get: the goal, the learner's profile, all notes/milestones/questions recorded during the session, and the (trimmed) transcript.
 
@@ -61,7 +63,7 @@ export class Compiler {
       input.transcript,
       '>>>',
     ].join('\n');
-    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg });
+    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg, timeoutMs: TIMEOUT_MS });
     return text.replace(/^```(?:markdown|md)?\s*/i, '').replace(/```\s*$/i, '').trim();
   }
 }

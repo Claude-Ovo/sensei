@@ -56,7 +56,7 @@ export class Triage {
         const res = await this.ai.models.generateContent({
           model: this.model,
           contents: [{ role: 'user', parts: [{ text: PROMPT.replace('{slice}', slice.slice(-6000)) }] }],
-          config: { temperature: 0.1, maxOutputTokens: 400 },
+          config: { temperature: 0.1, maxOutputTokens: 400, abortSignal: AbortSignal.timeout(7000) },
         });
         // Gemma 4 会带 thought part；只取非 thought 的文本
         const parts = res.candidates?.[0]?.content?.parts ?? [];

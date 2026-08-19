@@ -8,6 +8,8 @@ import { fallbackModels, makeModel, runOnce } from './llm.js';
  * Coach：学习者主动开口（sensei ask "..."）时回答。
  * 和 Observer 共享同一份上下文，但允许长一点、允许对话。
  */
+const TIMEOUT_MS = 40_000;
+
 const INSTRUCTION = `You are Sensei, a patient senior engineer coaching a learner who is working in a terminal.
 You are given their goal, profile, notes so far, the recent terminal transcript, and their question.
 Answer the question directly and concretely, grounded in what actually happened in the transcript (quote the relevant line when useful).
@@ -51,7 +53,7 @@ export class Coach {
       ...input.history.slice(-8).map((h) => `${h.role === 'user' ? 'Learner' : 'Sensei'}: ${h.text}`),
       `Learner asks now: ${input.question}`,
     ].join('\n');
-    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg });
+    const { text } = await runOnce(this.agent, message, { models: fallbackModels(this.cfg), cfg: this.cfg, timeoutMs: TIMEOUT_MS });
     return text.trim();
   }
 }
