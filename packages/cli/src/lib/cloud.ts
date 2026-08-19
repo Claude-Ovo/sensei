@@ -93,12 +93,19 @@ export class CloudStore {
     );
   }
 
+  private lastMetaTouch = 0;
+
   chunk(c: Chunk): void {
+    // 非整数 seq（ask/agent 插入的 x.5）不进 chunks 集合，它们已在 hints/messages 里
+    if (!Number.isInteger(c.seq)) return;
     const id = String(c.seq).padStart(6, '0');
+    // 会话文档的 lastSeq/updatedAt 最多每 3 秒刷一次，省一半写入配额（Spark 免费额度 2 万写/天）
+    const touchMeta = Date.now() - this.lastMetaTouch > 3000;
+    if (touchMeta) this.lastMetaTouch = Date.now();
     this.queue(async () => {
       const batch = this.db.batch();
       batch.set(this.ref.collection('chunks').doc(id), { ...c, ts: FieldValue.serverTimestamp() });
-      batch.set(this.ref, { lastSeq: c.seq, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      if (touchMeta) batch.set(this.ref, { lastSeq: c.seq, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       await batch.commit();
     }, 'chunk');
   }
