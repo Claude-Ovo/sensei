@@ -10,7 +10,7 @@ const RULES: Array<[RegExp, string]> = [
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '<REDACTED_JWT>'],
   [/(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/gi, '$1<REDACTED_TOKEN>'],
   // KEY=value / "key": "value" 形态里的敏感值
-  [/((?:api[_-]?key|secret|token|passw(?:or)?d|authorization)\s*[=:]\s*["']?)[^\s"'&]{6,}/gi, '$1<REDACTED>'],
+  [/((?:api[_-]?key|secret|token|passw(?:or)?d|authorization)\s*[=:]\s*["']?)(?!Bearer\b|Basic\b)[^\s"'&]{6,}/gi, '$1<REDACTED>'],
   // 邮箱
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<EMAIL>'],
   // 私网 IP 保留，公网 IPv4 打码
