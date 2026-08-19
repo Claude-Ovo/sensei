@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 660" width="1240" height="660" role="img" aria-label="Sensei architecture: the CLI wraps the learner's shell, redacts the stream, gates it through regex, Gemma triage and the Gemini Observer, mirrors everything to Firestore, and the Firebase-hosted panel reads it live and writes replies and feedback back through an inbound collection.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#57606a"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1a7f37"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0969da"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; font-size: 12px; }
+    .h { font-size: 14px; font-weight: 600; }
+    .h2 { font-size: 13px; font-weight: 600; }
+    .s { font-size: 11px; fill: #57606a; }
+    .mono { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 11px; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.2; }
+    .group { fill: #f6f8fa; stroke: #8c959f; stroke-width: 1; stroke-dasharray: 4 3; }
+    .cloud { fill: #f0f6ff; stroke: #0969da; stroke-width: 1.2; }
+    .gate { fill: #ecfdf0; stroke: #1a7f37; stroke-width: 1.2; }
+    .edge { stroke: #57606a; stroke-width: 1.4; fill: none; }
+    .edge-accent { stroke: #1a7f37; stroke-width: 1.6; fill: none; }
+    .edge-blue { stroke: #0969da; stroke-width: 1.4; fill: none; }
+    .lbl { font-size: 11px; fill: #1f2328; }
+  </style>
+  <rect x="0" y="0" width="1240" height="660" fill="#ffffff"/>
+
+  <!-- Learner terminal -->
+  <rect x="24" y="60" width="200" height="200" rx="8" class="box"/>
+  <text x="124" y="84" text-anchor="middle" class="h">Learner's terminal</text>
+  <rect x="38" y="100" width="172" height="74" rx="4" fill="#0d1117"/>
+  <text x="46" y="119" class="mono" style="fill:#7ee787">$ git commit -m "first"</text>
+  <text x="46" y="135" class="mono" style="fill:#c9d1d9">fatal: unable to auto-</text>
+  <text x="46" y="150" class="mono" style="fill:#c9d1d9">detect email address</text>
+  <text x="46" y="166" class="mono" style="fill:#79c0ff">[sensei] set user.email…</text>
+  <text x="124" y="198" text-anchor="middle" class="s">the shell runs unchanged</text>
+  <text x="124" y="214" text-anchor="middle" class="s">inside a pty owned by sensei</text>
+  <text x="124" y="242" text-anchor="middle" class="mono">sensei ask · reply · fb · done</text>
+
+  <!-- sensei CLI process -->
+  <rect x="290" y="36" width="540" height="588" rx="10" class="group"/>
+  <text x="306" y="60" class="h">sensei CLI process (Node 24, on the learner's machine)</text>
+
+  <!-- pty + redact -->
+  <rect x="306" y="80" width="240" height="86" rx="6" class="box"/>
+  <text x="318" y="100" class="h2">pty wrapper</text>
+  <text x="318" y="118" class="s">node-pty · mirrors I/O both ways</text>
+  <text x="318" y="135" class="s">ANSI/OSC cleaning · CR folding</text>
+  <text x="318" y="152" class="s">redacts keys, tokens, emails, IPs, home</text>
+
+  <!-- local log -->
+  <rect x="306" y="186" width="240" height="44" rx="6" class="box"/>
+  <text x="318" y="204" class="h2">local session log</text>
+  <text x="318" y="221" class="mono">~/.sensei/sessions/&lt;id&gt;.jsonl</text>
+
+  <!-- gate chain -->
+  <rect x="560" y="80" width="256" height="150" rx="6" class="gate"/>
+  <text x="572" y="100" class="h2" style="fill:#1a7f37">three-stage gate, per quiet moment</text>
+  <text x="572" y="120" class="lbl">1. regex, free: skip prompt-only · escalate errors</text>
+  <text x="572" y="139" class="lbl">2. triage, Gemma 4: worth attention now?</text>
+  <text x="572" y="158" class="lbl">3. observe, Gemini 3.7 Flash via ADK → JSON</text>
+  <text x="586" y="176" class="mono">status · stuck_reason · hint</text>
+  <text x="586" y="191" class="mono">question · note · milestone</text>
+  <text x="586" y="206" class="mono">profile_update</text>
+  <text x="572" y="223" class="s">2.5s debounce · 6s min gap · timeouts · fallback</text>
+
+  <!-- agents -->
+  <rect x="306" y="256" width="510" height="118" rx="6" class="box"/>
+  <text x="318" y="276" class="h2">agents — @google/adk LlmAgent · Gemini API · key stays local</text>
+  <rect x="318" y="288" width="150" height="70" rx="4" class="box"/>
+  <text x="393" y="308" text-anchor="middle" class="h2" style="font-size:12.5px">Observer</text>
+  <text x="393" y="325" text-anchor="middle" class="s">background loop</text>
+  <text x="393" y="340" text-anchor="middle" class="s">silent by default</text>
+  <rect x="486" y="288" width="150" height="70" rx="4" class="box"/>
+  <text x="561" y="308" text-anchor="middle" class="h2" style="font-size:12.5px">Coach</text>
+  <text x="561" y="325" text-anchor="middle" class="s">answers sensei ask</text>
+  <text x="561" y="340" text-anchor="middle" class="s">grounded in transcript</text>
+  <rect x="654" y="288" width="150" height="70" rx="4" class="box"/>
+  <text x="729" y="308" text-anchor="middle" class="h2" style="font-size:12.5px">Compiler</text>
+  <text x="729" y="325" text-anchor="middle" class="s">sensei done / compile</text>
+  <text x="729" y="340" text-anchor="middle" class="s">session → tutorial.md</text>
+
+  <!-- brain state -->
+  <rect x="306" y="400" width="244" height="118" rx="6" class="box"/>
+  <text x="318" y="420" class="h2">brain state</text>
+  <text x="318" y="440" class="s">transcript window · notes · milestones</text>
+  <text x="318" y="456" class="s">hints given · pending question · Q&amp;A</text>
+  <text x="318" y="479" class="h2" style="font-size:12.5px">learner profile</text>
+  <text x="318" y="496" class="s">level · verbosity · style · known · weak</text>
+  <text x="318" y="511" class="s">adjusted by feedback (too-basic, …)</text>
+
+  <!-- ipc -->
+  <rect x="570" y="400" width="246" height="118" rx="6" class="box"/>
+  <text x="582" y="420" class="h2">local IPC</text>
+  <text x="582" y="440" class="s">127.0.0.1 HTTP · token in current.json</text>
+  <text x="582" y="456" class="s">and in the wrapped shell's env</text>
+  <text x="582" y="479" class="mono">/ask /reply /note /fb /status /done</text>
+  <text x="582" y="499" class="s">same routes serve panel inbound msgs</text>
+
+  <text x="306" y="556" class="s">cloud mirror is optional: without a service account everything still works offline;</text>
+  <text x="306" y="573" class="s">cloud writes are queued and never block the terminal — the local JSONL is the source of truth.</text>
+
+  <!-- Google Cloud -->
+  <rect x="900" y="36" width="316" height="588" rx="10" class="cloud"/>
+  <text x="916" y="60" class="h" style="fill:#0969da">Google Cloud · Firebase project (Spark)</text>
+
+  <rect x="916" y="80" width="284" height="290" rx="6" class="box"/>
+  <text x="928" y="100" class="h2">Cloud Firestore</text>
+  <text x="928" y="122" class="mono">sessions/{id}</text>
+  <text x="942" y="140" class="mono">goal · state · status · profile</text>
+  <text x="942" y="156" class="mono">tutorial · public · ownerEmail</text>
+  <text x="942" y="176" class="mono">chunks/{seq}   terminal stream</text>
+  <text x="942" y="192" class="mono">notes/         notes · milestones</text>
+  <text x="942" y="208" class="mono">hints/         level · text</text>
+  <text x="942" y="224" class="mono">questions/     text · answer</text>
+  <text x="942" y="240" class="mono">messages/      learner → sensei</text>
+  <text x="942" y="256" class="mono" style="fill:#0969da">inbound/       panel → CLI</text>
+  <text x="928" y="284" class="s">rules: public sessions readable by anyone;</text>
+  <text x="928" y="300" class="s">else only ownerEmail after Google sign-in;</text>
+  <text x="928" y="316" class="s">clients may only create inbound docs.</text>
+  <text x="928" y="344" class="s">CLI writes via Admin SDK (gRPC);</text>
+  <text x="928" y="360" class="s">the panel reads via the Web SDK.</text>
+
+  <rect x="916" y="400" width="284" height="118" rx="6" class="box"/>
+  <text x="928" y="420" class="h2">Firebase Hosting · web panel</text>
+  <text x="928" y="440" class="s">React · realtime onSnapshot listeners</text>
+  <text x="928" y="457" class="s">live stream · hints · notes · questions</text>
+  <text x="928" y="474" class="s">feedback buttons · profile · tutorial</text>
+  <text x="928" y="497" class="mono">https://sensei-agent.web.app</text>
+
+  <rect x="916" y="540" width="284" height="64" rx="6" class="box"/>
+  <text x="928" y="560" class="h2">Firebase Auth</text>
+  <text x="928" y="578" class="s">Google sign-in for owners; public sessions</text>
+  <text x="928" y="594" class="s">need no account (demo / judges)</text>
+
+  <!-- Edges: terminal <-> pty -->
+  <line x1="224" y1="120" x2="304" y2="120" class="edge" marker-end="url(#arrow)"/>
+  <text x="264" y="112" text-anchor="middle" class="lbl">keystrokes</text>
+  <line x1="304" y1="146" x2="226" y2="146" class="edge" marker-end="url(#arrow)"/>
+  <text x="264" y="162" text-anchor="middle" class="lbl">output + hints</text>
+  <!-- pty -> log -->
+  <line x1="426" y1="166" x2="426" y2="184" class="edge" marker-end="url(#arrow)"/>
+  <!-- pty -> gate -->
+  <line x1="546" y1="120" x2="558" y2="120" class="edge-accent" marker-end="url(#arrow-accent)"/>
+  <text x="552" y="110" text-anchor="middle" class="lbl">chunk</text>
+  <!-- gate -> observer -->
+  <path d="M 640 230 L 640 248 L 393 248 L 393 286" class="edge-accent" marker-end="url(#arrow-accent)"/>
+  <text x="520" y="243" text-anchor="middle" class="lbl">only when it passes the gate</text>
+  <!-- observer -> brain state -->
+  <line x1="393" y1="358" x2="393" y2="398" class="edge" marker-end="url(#arrow)"/>
+  <text x="400" y="382" class="lbl">note · milestone · profile</text>
+  <!-- ipc -> coach/compiler -->
+  <path d="M 690 398 L 690 384 L 561 384 L 561 360" class="edge" marker-end="url(#arrow)"/>
+  <line x1="729" y1="398" x2="729" y2="360" class="edge" marker-end="url(#arrow)"/>
+  <text x="626" y="378" text-anchor="middle" class="lbl">ask</text>
+  <text x="736" y="382" class="lbl">done</text>
+  <!-- terminal commands -> ipc -->
+  <path d="M 124 262 L 124 600 L 693 600 L 693 520" class="edge" marker-end="url(#arrow)"/>
+  <text x="410" y="614" text-anchor="middle" class="lbl">sensei ask/reply/note/fb/done → 127.0.0.1 IPC</text>
+
+  <!-- CLI -> Firestore -->
+  <line x1="830" y1="150" x2="914" y2="150" class="edge-blue" marker-end="url(#arrow-blue)"/>
+  <text x="872" y="140" text-anchor="middle" class="lbl">writes</text>
+  <text x="872" y="166" text-anchor="middle" class="s">Admin SDK</text>
+  <!-- Firestore inbound -> CLI -->
+  <line x1="914" y1="256" x2="832" y2="256" class="edge-blue" marker-end="url(#arrow-blue)"/>
+  <text x="872" y="246" text-anchor="middle" class="lbl">listens</text>
+  <text x="872" y="272" text-anchor="middle" class="s">reply · feedback</text>
+  <!-- Firestore <-> panel -->
+  <line x1="1048" y1="398" x2="1048" y2="372" class="edge-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="1068" y1="372" x2="1068" y2="398" class="edge-blue" marker-end="url(#arrow-blue)"/>
+  <text x="1076" y="389" class="lbl">realtime · inbound</text>
+</svg>

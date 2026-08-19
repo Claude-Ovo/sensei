@@ -22,6 +22,8 @@ Sensei fixes that by living **inside** the terminal session:
 
 ## Architecture
 
+![Sensei architecture](docs/architecture.svg)
+
 ```
  your terminal                                Google Cloud (Firebase project, Spark plan)
 ┌──────────────────────────────────┐          ┌──────────────────────────────────────┐
