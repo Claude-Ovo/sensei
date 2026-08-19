@@ -154,6 +154,10 @@ export class Brain {
   private async act(obs: Observation, atSeq: number, reason: string): Promise<void> {
     this.o.log.append('meta', 'observe', { reason, status: obs.status, confidence: obs.confidence, what: obs.what_happened });
     this.o.cloud?.setState({ status: obs.status, lastObservation: obs.what_happened, ticks: this.ticks });
+    // 第一次观察时露个面：让学习者知道它真的在看，而不是死了
+    if (this.ticks === 1 && !obs.hint && !this.o.quietObserver) {
+      this.o.say(`${chalk.dim('(watching) ' + obs.what_happened)}`, 'info');
+    }
 
     if (obs.note && !this.notes.includes(obs.note)) {
       this.notes.push(obs.note);
