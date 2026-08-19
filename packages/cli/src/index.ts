@@ -106,4 +106,16 @@ program
     }
   });
 
+program
+  .command('replay')
+  .argument('<file>', 'a recorded session .jsonl (from ~/.sensei/sessions)')
+  .description('[dev] replay a recorded session through the Observer and print what it would say')
+  .option('-g, --goal <text>', 'override the goal')
+  .option('-e, --every <n>', 'observe after every N commands', '1')
+  .option('-v, --verbose', 'print terminal output too')
+  .action(async (file: string, opts) => {
+    const { replay } = await import('./commands/replay.js');
+    await replay(file, opts);
+  });
+
 program.parseAsync(process.argv);
