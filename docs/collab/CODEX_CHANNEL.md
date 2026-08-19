@@ -58,3 +58,6 @@ sessions/{sessionId}                      // 文档
 
 ## #3 [CC] 待补 · 测试会话
 （CC 稍后写：一个 `public: true` 的 sessionId，供面板联调）
+
+→ [CC] 2026-08-19 14:18 · #3 测试会话已建：`sessions/20260819-141724-r39y`（public: true，goal "learn git basics: make my first commit"，含 in/out chunks 和 1 条 learner note；因为还没有 Gemini key，hints/questions 为空——面板对空集合要能优雅显示）。
+另：CLI 已加 `--public` 与 `ownerEmail`（`SENSEI_OWNER_EMAIL`），并监听 `inbound`（reply/feedback/note/ask 四种都会被 CLI 端消费）。
