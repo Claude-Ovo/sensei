@@ -24,23 +24,6 @@ Sensei fixes that by living **inside** the terminal session:
 
 ![Sensei architecture](docs/architecture.svg)
 
-```
- your terminal                                Google Cloud (Firebase project, Spark plan)
-┌──────────────────────────────────┐          ┌──────────────────────────────────────┐
-│ sensei CLI (Node 24)             │  chunks  │ Cloud Firestore                      │
-│ ├─ node-pty wraps your shell     │ ───────▶ │  sessions/{id}                       │
-│ ├─ ANSI cleaning + local redact  │          │   ├─ chunks / notes / hints           │
-│ ├─ Observer agent (ADK, bg loop) │  hints   │   ├─ questions / messages / feedback  │
-│ │   gemini-3.7-flash             │ ◀─────── │   └─ inbound (panel → CLI)            │
-│ ├─ Coach agent (sensei ask)      │          │  learners/{id}  profile               │
-│ ├─ Compiler agent (sensei done)  │          └──────────────────────────────────────┘
-│ └─ local IPC (127.0.0.1)         │                       ▲ realtime listeners
-└──────────────────────────────────┘          ┌──────────────────────────────────────┐
-        ▲ inline hints / questions            │ Firebase Hosting: web panel (React)  │
-        │ sensei ask · reply · note · fb      │  live log · notes · Q&A · feedback ·  │
-                                              │  learner profile · tutorial           │
-                                              └──────────────────────────────────────┘
-```
 
 Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
