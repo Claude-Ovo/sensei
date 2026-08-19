@@ -74,9 +74,9 @@ export class Triage {
         await new Promise((r) => setTimeout(r, 800));
       }
     }
-    // 便宜模型不可用就退回直接观察，5 分钟后再试
-    this.disabledUntil = Date.now() + 5 * 60 * 1000;
-    if (!this.warned) {
+    // 便宜模型慢/不可用就退回直接观察，3 分钟后再试。安静地退，别打扰终端。
+    this.disabledUntil = Date.now() + 3 * 60 * 1000;
+    if (!this.warned && process.env.SENSEI_DEBUG) {
       this.warned = true;
       process.stderr.write(`\n[sensei] triage (${this.model}) unavailable, observer will look directly: ${lastErr.slice(0, 100)}\n`);
     }

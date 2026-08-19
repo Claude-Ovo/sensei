@@ -50,6 +50,8 @@ export class Brain {
   private observing = false;
   private lastObserveAt = 0;
   private lastFullObserveAt = 0;
+  private lastHintAt = 0;
+  private lastHintSeq = 0;
   private lastObservedSeq = 0;
   private startedAt = Date.now();
   private llmError: string | null = null;
@@ -187,10 +189,19 @@ export class Brain {
       if (changed) saveProfile(this.profile);
     }
     if (obs.hint && obs.hint.text && !this.o.quietObserver) {
-      this.hintsGiven.push(obs.hint.text);
-      this.o.log.append('agent', obs.hint.text, { kind: 'hint', level: obs.hint.level, atSeq, evidence: obs.stuck_reason });
-      this.o.cloud?.hint({ level: obs.hint.level, text: obs.hint.text, evidence: obs.stuck_reason ?? undefined, atSeq });
-      this.o.say(obs.hint.text, obs.hint.level);
+      // 冷却：刚说过话（40s 内）且这段里没有新的报错/用户消息 → 这次不开口，只记笔记
+      const sinceLastHint = Date.now() - this.lastHintAt;
+      const fresh = quickSignal(this.transcript.since(this.lastHintSeq)) === 'error';
+      if (sinceLastHint < 40_000 && !fresh) {
+        this.o.log.append('meta', 'hint.suppressed', { text: obs.hint.text.slice(0, 120), sinceLastHint });
+      } else {
+        this.hintsGiven.push(obs.hint.text);
+        this.lastHintAt = Date.now();
+        this.lastHintSeq = atSeq;
+        this.o.log.append('agent', obs.hint.text, { kind: 'hint', level: obs.hint.level, atSeq, evidence: obs.stuck_reason });
+        this.o.cloud?.hint({ level: obs.hint.level, text: obs.hint.text, evidence: obs.stuck_reason ?? undefined, atSeq });
+        this.o.say(obs.hint.text, obs.hint.level);
+      }
     }
     if (obs.question && !this.pendingQuestion) {
       const id = await this.o.cloud?.question({ text: obs.question, atSeq });
@@ -268,6 +279,10 @@ export class Brain {
         this.qa.push({ q: text, a: answer });
         this.o.log.append('agent', answer, { kind: 'answer' });
         this.o.cloud?.hint({ level: 'explain', text: answer, atSeq: this.transcript.lastSeq });
+        // 刚正面回答过：Observer 别紧接着复述一遍
+        this.hintsGiven.push(`(answered) ${answer.slice(0, 200)}`);
+        this.lastHintAt = Date.now();
+        this.lastHintSeq = this.transcript.lastSeq;
         this.transcript.push({ t: new Date().toISOString(), seq: this.transcript.lastSeq + 0.5, kind: 'agent', text: answer });
         return { answer };
       }
