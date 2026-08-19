@@ -36,6 +36,11 @@ const LEVEL_STYLE: Record<string, (s: string) => string> = {
 };
 
 export async function start(opts: StartOptions) {
+  if (process.env.SENSEI_ACTIVE === '1') {
+    process.stderr.write(chalk.yellow(`[sensei] you are already inside a sensei session (${process.env.SENSEI_SESSION}). Type "exit" to leave it first.
+`));
+    process.exit(2);
+  }
   const cfg = loadConfig();
   const shell = opts.shell || defaultShell();
   const sessionId = newSessionId();

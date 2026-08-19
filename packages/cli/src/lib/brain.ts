@@ -11,6 +11,7 @@ import { Observer, type Observation } from '../agent/observer.js';
 import { Coach } from '../agent/coach.js';
 import { Compiler } from '../agent/compiler.js';
 import { Triage } from '../agent/triage.js';
+import { modelHealth } from '../agent/llm.js';
 
 export interface BrainOptions {
   cfg: SenseiConfig;
@@ -258,6 +259,7 @@ export class Brain {
           ticks: this.ticks,
           triages: this.triages,
           llm: this.llmReady ? 'ready' : this.llmError,
+          models: { observer: this.o.cfg.observerModel, coach: this.o.cfg.model, triage: this.o.cfg.cheapModel, resting: modelHealth() },
           triage: this.triage ? (this.triage.available ? this.o.cfg.cheapModel : 'paused') : 'off',
           pendingQuestion: this.pendingQuestion?.text ?? null,
         };
