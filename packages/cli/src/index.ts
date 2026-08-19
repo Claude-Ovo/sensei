@@ -107,6 +107,20 @@ program
   });
 
 program
+  .command('compile')
+  .argument('[sessionId]', 'session id (default: the most recent recorded session)')
+  .description('Compile a finished session (from its local log) into a tutorial')
+  .option('--offline', 'do not sync the tutorial to Firestore')
+  .action(async (sessionId: string | undefined, opts) => {
+    try {
+      const { compile } = await import('./commands/compile.js');
+      await compile(sessionId, opts);
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+program
   .command('replay')
   .argument('<file>', 'a recorded session .jsonl (from ~/.sensei/sessions)')
   .description('[dev] replay a recorded session through the Observer and print what it would say')
