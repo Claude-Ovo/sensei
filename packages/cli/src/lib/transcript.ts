@@ -47,6 +47,15 @@ export class Transcript {
     return { text, fromSeq, toSeq: this.lastSeq };
   }
 
+  /** 从某个 seq 之后的新内容（给分诊用），最多 maxChars */
+  since(seq: number, maxChars = 6000): string {
+    const out: string[] = [];
+    for (const c of this.chunks) if (c.seq > seq) out.push(...renderChunk(c));
+    let text = out.join('\n');
+    if (text.length > maxChars) text = '…' + text.slice(-maxChars);
+    return text;
+  }
+
   /** 全量（给编译教程用），按顺序 */
   full(maxChars = 60000): string {
     const out: string[] = [];

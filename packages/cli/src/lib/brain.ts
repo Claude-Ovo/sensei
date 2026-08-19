@@ -10,6 +10,7 @@ import { applyFeedback, loadProfile, saveProfile, type LearnerProfile } from './
 import { Observer, type Observation } from '../agent/observer.js';
 import { Coach } from '../agent/coach.js';
 import { Compiler } from '../agent/compiler.js';
+import { Triage } from '../agent/triage.js';
 
 export interface BrainOptions {
   cfg: SenseiConfig;
@@ -44,13 +45,16 @@ export class Brain {
   private observer: Observer | null = null;
   private coach: Coach | null = null;
   private compiler: Compiler | null = null;
+  private triage: Triage | null = null;
   private timer: NodeJS.Timeout | null = null;
   private observing = false;
   private lastObserveAt = 0;
+  private lastFullObserveAt = 0;
   private lastObservedSeq = 0;
   private startedAt = Date.now();
   private llmError: string | null = null;
   ticks = 0;
+  triages = 0;
 
   constructor(private readonly o: BrainOptions) {
     this.profile = loadProfile();
@@ -58,6 +62,7 @@ export class Brain {
       this.observer = new Observer(o.cfg);
       this.coach = new Coach(o.cfg);
       this.compiler = new Compiler(o.cfg);
+      if (o.cfg.cheapModel && process.env.SENSEI_TRIAGE !== '0') this.triage = new Triage(o.cfg);
     } catch (e) {
       this.llmError = String((e as Error).message);
     }
@@ -98,8 +103,25 @@ export class Brain {
     this.observing = true;
     this.lastObserveAt = now;
     const win = this.transcript.window();
+    const prevSeq = this.lastObservedSeq;
     this.lastObservedSeq = win.toSeq;
     try {
+      // 便宜的守门员先看一眼：纯噪音就别惊动大模型
+      if (this.triage?.available && reason !== 'reply' && reason !== 'replay-final') {
+        const slice = this.transcript.since(prevSeq);
+        const tri = await this.triage.classify(slice);
+        if (tri) {
+          this.triages++;
+          this.o.log.append('meta', 'triage', { attention: tri.attention, kind: tri.kind, summary: tri.summary });
+          const sinceLastObs = now - this.lastFullObserveAt;
+          const skip = tri.attention === 'none' || (tri.attention === 'low' && sinceLastObs < 45_000);
+          if (skip) {
+            this.o.cloud?.setState({ status: tri.kind === 'idle' ? 'idle' : 'flowing', lastObservation: tri.summary, triages: this.triages });
+            return null;
+          }
+        }
+      }
+      this.lastFullObserveAt = now;
       const obs = await this.observer.observe({
         goal: this.o.goal,
         profile: this.profile,
@@ -214,7 +236,9 @@ export class Brain {
           hints: this.hintsGiven.length,
           milestones: this.milestones,
           ticks: this.ticks,
+          triages: this.triages,
           llm: this.llmReady ? 'ready' : this.llmError,
+          triage: this.triage ? (this.triage.available ? this.o.cfg.cheapModel : 'paused') : 'off',
           pendingQuestion: this.pendingQuestion?.text ?? null,
         };
       case '/ask': {
