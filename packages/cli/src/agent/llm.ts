@@ -48,8 +48,9 @@ const PENALTY_MS = 10 * 60 * 1000;
 export function orderModels(models: string[]): string[] {
   const now = Date.now();
   const ok = models.filter((m) => (penaltyUntil.get(m) ?? 0) <= now);
-  const bad = models.filter((m) => (penaltyUntil.get(m) ?? 0) > now);
-  return [...ok, ...bad];
+  if (ok.length) return ok; // 歇着的模型这次直接跳过
+  // 全在歇：挑最早恢复的那个试一下
+  return [...models].sort((a, b) => (penaltyUntil.get(a) ?? 0) - (penaltyUntil.get(b) ?? 0)).slice(0, 1);
 }
 export function penalize(model: string, ms = PENALTY_MS): void {
   penaltyUntil.set(model, Math.max(penaltyUntil.get(model) ?? 0, Date.now() + ms));
