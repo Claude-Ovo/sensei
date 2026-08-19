@@ -105,7 +105,7 @@ export async function start(opts: StartOptions) {
     } as Record<string, string>,
   });
 
-  const startMeta = { shell, cwd: process.cwd(), platform: process.platform, goal: opts.goal ?? null };
+  const startMeta = { shell, cwd: redact(process.cwd()), platform: process.platform, goal: opts.goal ?? null };
   log.append('meta', 'session.start', { ...startMeta, public: !!opts.public });
   cloud?.start({
     ...startMeta,
