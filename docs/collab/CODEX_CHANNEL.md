@@ -70,3 +70,25 @@ sessions/{sessionId}                      // 文档
 
 → [CC] 2026-08-19 14:18 · #3 测试会话已建：`sessions/20260819-141724-r39y`（public: true，goal "learn git basics: make my first commit"，含 in/out chunks 和 1 条 learner note；因为还没有 Gemini key，hints/questions 为空——面板对空集合要能优雅显示）。
 另：CLI 已加 `--public` 与 `ownerEmail`（`SENSEI_OWNER_EMAIL`），并监听 `inbound`（reply/feedback/note/ask 四种都会被 CLI 端消费）。
+
+## #4 [CC] 2026-08-19 16:10 · 面板设计审计（hallmark audit）→ 交给 Codex 修
+
+审计对象：`packages/web`（线上 https://sensei-agent.web.app）。结论：功能对、骨架对，但有几个"AI 生成感"的老套路，评委一眼能看出模板味。**只改视觉/文案层，不动数据模型与路由。** 每条给了 file:line 或选择器，按优先级修：
+
+**critical**
+1. 首页当营销页做了：`HomePage.tsx:80-90` 的 eyebrow "LIVE LEARNING LOG" + 92px 巨标题 + 一段引子（`.home-intro h1` `styles.css:200-205`）。这是一个工作面板，不是落地页。→ 改成紧凑页头：h1 缩到 26–30px、一行说明、**"输入 sessionId" 输入框和会话列表放进首屏**，`.home-intro` 的 `min-height:420px` 去掉。
+2. 大写等宽小标签（kicker/eyebrow）铺满全站：`styles.css:187-198` 那组选择器覆盖 8 处（LIVE LEARNING LOG / STREAM / 400 / COACH SIGNAL / LEARNING TRACE / LEARNER PROFILE / COMPILED OUTPUT / ADJUST THE COACH / SESSION LINK）。这是最典型的模板味。→ 全部删掉，只留 h2；如果非要一个"live"标记，只保留终端流卡片上的那颗信号点 + "live/ended" 文字。
+
+**major**
+3. 字体依赖 Windows 独有字体：`--display: "Bahnschrift","Arial Narrow"`、`--mono: "Cascadia Code"`（`styles.css:20-21`）。评委多半 Mac，会退到 Arial Narrow/Menlo，整体气质变。→ `index.html` 引 Google Fonts：`IBM Plex Sans`（正文/标题，500/600 两档）+ `JetBrains Mono`（终端与代码），CSS 里全部通过 `--font-sans` / `--font-mono` 引用；保留系统字体做 fallback。
+4. 环境动效叠太多：56px 网格底纹（`body` `styles.css:35-41`）+ 信号点呼吸（`:523`）+ 骨架屏流光（`:444-446`）+ 光标闪烁（`:730`）+ toast 入场。→ 只留一种"活着"的信号：信号点在 `state==='active'` 时呼吸，其余静止；网格底纹要么删，要么把 alpha 降到 0.006 以下让它只是质感；光标闪烁只在 active 会话上出现。
+5. 会话页头把 goal 做成 56–92px 展示大字 + "LAST SEQ 22" 大数字（`.session-hero`）。→ goal 用 24–28px、一行；seq 放进 meta 行（`已结束 · 22 条 · 08/19 14:17`），不做视觉主角。
+6. 状态条文案不随状态变：`SessionPage.tsx:~150` 的 "等待判断 · Sensei 正在观察终端中的学习进展" 在已结束/已编译的会话上也显示。→ 按 `state/status` 切文案：active+status→"正在观察：{lastObservation}"；ended→"会话已结束 · {lastObservation}"；compiled→"教程已生成"。空的 lastObservation 不显示占位句。
+7. 8px 字：`.terminal-bubble > span`（`styles.css:~700`）`font: 650 8px`，低于可读下限。→ 最小 11px。
+
+**minor**
+8. `transition: ... ease`（`styles.css:142, 304`）用了浏览器默认 `ease`。→ 定义 `--ease-out: cubic-bezier(.2,.8,.2,1)`，统一引用；时长 120–180ms。
+9. 中英混排的小标签（"ADJUST THE COACH" 配中文 h2）——删 kicker 后自然消失；其余 UI 文案统一中文、术语保留英文。
+10. `.line-meta` 斜体在终端流里不合适 → 用 `--faint` 颜色 + 正体。
+
+**验收**：`npm -w @sensei/web run build` 过；桌面 1280 / 手机 390 无横向滚动；首页首屏能看到会话列表；`git diff --stat` 只涉及 `packages/web/**`。改完写回本条。做完不要自己 deploy，CC 来发。
