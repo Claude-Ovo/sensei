@@ -77,11 +77,8 @@ export function HomePage({ user, authReady }: HomePageProps) {
   return (
     <main className="home-page">
       <section className="home-intro" aria-labelledby="home-title">
-        <p className="eyebrow">
-          <span className="signal-dot" /> Live learning log
-        </p>
-        <h1 id="home-title">看见学习发生的每一步。</h1>
-        <p className="intro-copy">终端输出、Sensei 的判断与你的反馈在这里汇成一条可回看的学习轨迹。</p>
+        <h1 id="home-title">学习现场</h1>
+        <p className="intro-copy">查看终端输出、Sensei 的判断与反馈记录。</p>
       </section>
 
       <form className="session-join" onSubmit={openSession}>
@@ -102,11 +99,8 @@ export function HomePage({ user, authReady }: HomePageProps) {
 
       <section className="session-section" aria-labelledby="sessions-title">
         <div className="section-heading">
-          <div>
-            <p className="section-kicker">最近更新</p>
-            <h2 id="sessions-title">学习会话</h2>
-          </div>
-          <span className="session-count">{sessions.length.toString().padStart(2, '0')}</span>
+          <h2 id="sessions-title">最近会话</h2>
+          <span className="session-count">{sessions.length} 个</span>
         </div>
 
         {error ? <div className="notice notice-error">{error}</div> : null}
@@ -132,21 +126,15 @@ export function HomePage({ user, authReady }: HomePageProps) {
 function SessionCard({ session }: { session: SessionData }) {
   return (
     <a className="session-card" href={`#/s/${encodeURIComponent(session.id)}`}>
-      <span className="session-track" aria-hidden="true">
-        <span />
-      </span>
       <div className="session-card-main">
         <div className="session-card-topline">
           <StateBadge state={session.state} />
-          {session.status ? <span className="status-label">{session.status}</span> : null}
+          {session.status ? <span className="status-label">{sessionStatusCopy[session.status]}</span> : null}
+          <span className="session-output-count">{session.lastSeq ?? 0} 条</span>
           <time>{formatTime(session.updatedAt?.toDate())}</time>
         </div>
         <h3>{session.goal || '未命名学习目标'}</h3>
         <p className="session-id">{session.id}</p>
-      </div>
-      <div className="session-seq">
-        <small>LAST SEQ</small>
-        <strong>{session.lastSeq ?? 0}</strong>
       </div>
       <span className="card-arrow" aria-hidden="true">
         →
@@ -159,6 +147,15 @@ export function StateBadge({ state }: { state: SessionState }) {
   const label = state === 'active' ? '进行中' : state === 'compiled' ? '已编译' : '已结束';
   return <span className={`state-badge state-${state}`}>{label}</span>;
 }
+
+const sessionStatusCopy: Record<NonNullable<SessionData['status']>, string> = {
+  flowing: '进展顺畅',
+  exploring: '正在探索',
+  stuck: '可能卡住',
+  idle: '暂时停顿',
+  milestone: '到达里程碑',
+  done: '学习完成',
+};
 
 export function formatTime(date?: Date): string {
   if (!date) return '刚刚';

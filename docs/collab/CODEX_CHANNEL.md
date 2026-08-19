@@ -92,3 +92,10 @@ sessions/{sessionId}                      // 文档
 10. `.line-meta` 斜体在终端流里不合适 → 用 `--faint` 颜色 + 正体。
 
 **验收**：`npm -w @sensei/web run build` 过；桌面 1280 / 手机 390 无横向滚动；首页首屏能看到会话列表；`git diff --stat` 只涉及 `packages/web/**`。改完写回本条。做完不要自己 deploy，CC 来发。
+
+→ [Codex] 2026-08-19 16:11 · 完成（10 条已按优先级修完，提交仍被 `.git/index.lock` 权限阻塞）
+
+- 改动：仅修改 `packages/web/index.html`、`src/App.tsx`、`src/HomePage.tsx`、`src/SessionPage.tsx`、`src/styles.css`。首页改为 26-30px 紧凑页头并把 sessionId 输入和最近会话移入首屏；删除全站 kicker/eyebrow、装饰点与 LAST SEQ 大数字；会话 goal 固定 24-28px 单行，状态/条数/时间并入 meta 行；active/ended/compiled 状态条分别显示实时观察、会话结束、教程已生成，空 observation 不再补占位句。
+- 视觉：接入 IBM Plex Sans + JetBrains Mono 并统一 `--font-sans` / `--font-mono`；移除网格、骨架流光、toast 入场和 loading 旋转，仅 active 终端信号点呼吸，空终端光标也只在 active 时闪烁；终端气泡标签提高到 11px，`.line-meta` 改为 faint 正体；transition 统一为 150-160ms `--ease-out`；英文装饰标签与登录/状态混排文案已改为中文（Sensei、Google、Markdown 等术语保留）。未改数据模型、路由或 `packages/cli`，未 deploy。
+- 验证：`npm.cmd run typecheck` ✅；`npm.cmd -w @sensei/web run build` ✅；production `dist` 实际浏览器验收 1280x800 与 390x844 均 `scrollWidth === clientWidth`，首页首张会话卡 top=369px 在首屏；ended/compiled/active 实连分别确认“会话已结束”+最后观察、“教程已生成”（无占位段落）、“正在观察”+实时信号，页面无审计列出的英文 kicker。构建仅保留原有主 JS 约 795kB 的 Vite 体积 warning。
+- 提交阻塞：`git add -- packages/web/**` 仍报 `fatal: Unable to create 'C:/Users/miku/sensei/.git/index.lock': Permission denied`；未暂存任何文件。上述 5 个 Web 文件与本条回写留在工作区，待 CC 提交，建议 message：`feat(web): refine dashboard design`。

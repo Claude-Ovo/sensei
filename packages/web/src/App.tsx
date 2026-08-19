@@ -78,7 +78,7 @@ function Header({ user, authBusy, onToggleAuth }: HeaderProps) {
       <div className="header-actions">
         {user?.email ? <span className="account-label">{user.email}</span> : null}
         <button className="button button-quiet" type="button" onClick={onToggleAuth} disabled={authBusy}>
-          {authBusy ? '请稍候…' : user ? '退出登录' : 'Sign in with Google'}
+          {authBusy ? '请稍候…' : user ? '退出登录' : '使用 Google 登录'}
         </button>
       </div>
     </header>

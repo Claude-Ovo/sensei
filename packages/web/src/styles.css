@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   color: #eef3f0;
   background: #0c0f0e;
   font-synthesis: none;
@@ -18,8 +18,9 @@
   --accent-soft: rgba(78, 224, 162, 0.12);
   --danger: #ff8b7b;
   --blue: #72a7ff;
-  --display: "Bahnschrift", "Arial Narrow", sans-serif;
-  --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --font-sans: "IBM Plex Sans", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 * {
@@ -34,11 +35,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    var(--canvas);
-  background-size: 56px 56px;
+  background: var(--canvas);
 }
 
 button,
@@ -96,7 +93,7 @@ a {
   place-items: center;
   border: 1px solid var(--accent);
   color: var(--accent);
-  font: 600 16px/1 var(--display);
+  font: 600 16px/1 var(--font-sans);
 }
 
 .wordmark > span:last-child {
@@ -105,7 +102,7 @@ a {
 }
 
 .wordmark strong {
-  font: 650 16px/1 var(--display);
+  font: 600 16px/1 var(--font-sans);
   letter-spacing: 0.04em;
 }
 
@@ -125,7 +122,7 @@ a {
   max-width: 260px;
   overflow: hidden;
   color: var(--muted);
-  font: 11px/1 var(--mono);
+  font: 11px/1 var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -138,8 +135,8 @@ a {
   background: transparent;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 650;
-  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+  font-weight: 600;
+  transition: border-color 150ms var(--ease-out), background 150ms var(--ease-out), color 150ms var(--ease-out), transform 150ms var(--ease-out);
 }
 
 .button:hover:not(:disabled) {
@@ -179,47 +176,21 @@ a {
 
 .home-intro {
   display: grid;
-  min-height: 420px;
-  align-content: center;
-  border-bottom: 1px solid var(--line);
-}
-
-.eyebrow,
-.section-kicker,
-.panel-kicker,
-.rail-card-heading p,
-.feedback-bar > div > p,
-.tutorial-toolbar p {
-  margin: 0;
-  color: var(--accent);
-  font: 600 10px/1.2 var(--mono);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.signal-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 9px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 5px var(--accent-soft);
+  gap: 8px;
+  padding: 42px 0 24px;
 }
 
 .home-intro h1 {
-  max-width: 900px;
-  margin: 27px 0 21px;
-  font: 500 clamp(44px, 7vw, 92px)/0.98 var(--display);
-  letter-spacing: -0.045em;
+  margin: 0;
+  font: 600 clamp(26px, 3vw, 30px)/1.2 var(--font-sans);
+  letter-spacing: -0.025em;
 }
 
 .intro-copy {
-  max-width: 610px;
   margin: 0;
   color: var(--muted);
-  font-size: clamp(15px, 1.5vw, 19px);
-  line-height: 1.75;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .session-join {
@@ -227,7 +198,7 @@ a {
   grid-template-columns: minmax(140px, 0.25fr) 1fr;
   align-items: center;
   gap: 24px;
-  padding: 28px 0;
+  padding: 20px 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -250,7 +221,7 @@ a {
   border-radius: 2px;
   background: #0d1210;
   color: var(--text);
-  font-family: var(--mono);
+  font-family: var(--font-mono);
 }
 
 .join-controls input {
@@ -262,7 +233,7 @@ input::placeholder {
 }
 
 .session-section {
-  padding-top: 72px;
+  padding-top: 30px;
 }
 
 .section-heading {
@@ -277,14 +248,14 @@ input::placeholder {
 .rail-card h2,
 .feedback-bar h2,
 .tutorial-toolbar h2 {
-  margin: 8px 0 0;
-  font: 520 26px/1.1 var(--display);
+  margin: 0;
+  font: 600 24px/1.2 var(--font-sans);
   letter-spacing: -0.02em;
 }
 
 .session-count {
   color: var(--faint);
-  font: 300 38px/1 var(--display);
+  font-size: 12px;
 }
 
 .session-list {
@@ -294,37 +265,19 @@ input::placeholder {
 .session-card {
   position: relative;
   display: grid;
-  grid-template-columns: 18px 1fr 110px 24px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   align-items: center;
   gap: 22px;
   min-height: 128px;
-  padding: 24px 16px 24px 0;
+  padding: 22px 16px;
   border-bottom: 1px solid var(--line);
   text-decoration: none;
-  transition: background 170ms ease, padding 170ms ease;
+  transition: background 160ms var(--ease-out), transform 160ms var(--ease-out);
 }
 
 .session-card:hover {
-  padding-left: 12px;
   background: rgba(255, 255, 255, 0.025);
-}
-
-.session-track {
-  position: relative;
-  align-self: stretch;
-  width: 1px;
-  margin-left: 6px;
-  background: var(--line-strong);
-}
-
-.session-track span {
-  position: absolute;
-  top: calc(50% - 4px);
-  left: -3px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
+  transform: translateX(4px);
 }
 
 .session-card-topline {
@@ -335,10 +288,11 @@ input::placeholder {
 
 .session-card-topline time,
 .status-label,
+.session-output-count,
 .session-id,
 .mono-label {
   color: var(--faint);
-  font: 10px/1.3 var(--mono);
+  font: 10px/1.3 var(--font-mono);
   letter-spacing: 0.06em;
 }
 
@@ -348,33 +302,16 @@ input::placeholder {
 
 .session-card h3 {
   margin: 16px 0 9px;
-  font: 520 clamp(18px, 2vw, 24px)/1.25 var(--display);
+  font: 500 clamp(18px, 2vw, 22px)/1.25 var(--font-sans);
 }
 
 .session-id {
   margin: 0;
 }
 
-.session-seq {
-  display: grid;
-  justify-items: end;
-  gap: 6px;
-}
-
-.session-seq small,
-.live-sequence span {
-  color: var(--faint);
-  font: 9px/1 var(--mono);
-  letter-spacing: 0.13em;
-}
-
-.session-seq strong {
-  font: 400 24px/1 var(--mono);
-}
-
 .card-arrow {
   color: var(--muted);
-  font-family: var(--mono);
+  font-family: var(--font-mono);
 }
 
 .state-badge {
@@ -384,7 +321,7 @@ input::placeholder {
   padding: 0 8px;
   border: 1px solid currentColor;
   border-radius: 999px;
-  font: 600 10px/1 var(--mono);
+  font: 600 10px/1 var(--font-mono);
 }
 
 .state-active {
@@ -423,7 +360,7 @@ input::placeholder {
 
 .empty-state h3 {
   margin: 0 0 10px;
-  font: 520 22px/1.2 var(--display);
+  font: 500 22px/1.2 var(--font-sans);
 }
 
 .empty-state p {
@@ -441,9 +378,7 @@ input::placeholder {
   display: block;
   height: 14px;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--surface) 0%, var(--surface-soft) 50%, var(--surface) 100%);
-  background-size: 200% 100%;
-  animation: skeleton 1.5s ease infinite;
+  background: var(--surface-soft);
 }
 
 .skeleton-short {
@@ -451,12 +386,12 @@ input::placeholder {
 }
 
 .session-page {
-  padding: 38px 0 100px;
+  padding: 30px 0 100px;
 }
 
 .back-link {
   display: inline-block;
-  margin-bottom: 38px;
+  margin-bottom: 26px;
   color: var(--muted);
   font-size: 12px;
   text-decoration: none;
@@ -467,44 +402,40 @@ input::placeholder {
 }
 
 .session-title-row {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 32px;
+  min-width: 0;
 }
 
 .session-meta-line {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.session-meta-line > * + *::before {
+  margin-right: 12px;
+  color: var(--line-strong);
+  content: "·";
 }
 
 .session-title-row h1 {
-  max-width: 980px;
-  margin: 20px 0 0;
-  font: 520 clamp(34px, 5vw, 66px)/1.02 var(--display);
-  letter-spacing: -0.04em;
-}
-
-.live-sequence {
-  display: grid;
-  flex: 0 0 auto;
-  justify-items: end;
-  gap: 8px;
-  padding-bottom: 4px;
-}
-
-.live-sequence strong {
-  color: var(--accent);
-  font: 360 38px/1 var(--mono);
+  max-width: 100%;
+  margin: 14px 0 0;
+  overflow: hidden;
+  font: 600 clamp(24px, 3vw, 28px)/1.3 var(--font-sans);
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .observation-bar {
   display: grid;
-  grid-template-columns: 10px auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 13px;
-  margin-top: 38px;
+  margin-top: 24px;
   padding: 16px 18px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -524,7 +455,7 @@ input::placeholder {
 }
 
 .observation-bar strong {
-  font: 650 12px/1 var(--display);
+  font: 600 12px/1.4 var(--font-sans);
 }
 
 .observation-bar p {
@@ -580,7 +511,7 @@ input::placeholder {
 .tab-ready {
   margin-left: 6px;
   color: var(--accent);
-  font: 8px/1 var(--mono);
+  font: 10px/1 var(--font-mono);
 }
 
 .session-notice {
@@ -622,10 +553,24 @@ input::placeholder {
   font-size: 19px;
 }
 
+.terminal-title,
+.terminal-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stream-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .autoscroll-control {
   display: flex;
   align-items: center;
-  gap: 7px;
   padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -633,17 +578,6 @@ input::placeholder {
   color: var(--muted);
   cursor: pointer;
   font-size: 10px;
-}
-
-.autoscroll-control span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--faint);
-}
-
-.autoscroll-control.is-on span {
-  background: var(--accent);
 }
 
 .terminal-window {
@@ -662,7 +596,7 @@ input::placeholder {
   margin: 0;
   padding: 3px 18px;
   color: #bdc7c1;
-  font: 12px/1.62 var(--mono);
+  font: 12px/1.62 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -681,7 +615,7 @@ input::placeholder {
 
 .line-meta {
   color: var(--faint);
-  font-style: italic;
+  font-style: normal;
 }
 
 .terminal-bubble {
@@ -699,8 +633,8 @@ input::placeholder {
 
 .terminal-bubble > span {
   color: var(--accent);
-  font: 650 8px/1 var(--mono);
-  letter-spacing: 0.15em;
+  font: 600 11px/1 var(--font-mono);
+  letter-spacing: 0.04em;
 }
 
 .terminal-bubble.bubble-user > span {
@@ -709,7 +643,7 @@ input::placeholder {
 
 .terminal-bubble pre {
   margin: 8px 0 0;
-  font: 12px/1.6 var(--mono);
+  font: 12px/1.6 var(--font-mono);
   white-space: pre-wrap;
 }
 
@@ -720,14 +654,19 @@ input::placeholder {
   justify-content: center;
   gap: 10px;
   color: var(--faint);
-  font: 12px/1 var(--mono);
+  font: 12px/1 var(--font-mono);
 }
 
 .terminal-cursor {
   width: 8px;
   height: 16px;
   background: var(--accent);
+  opacity: 0.45;
+}
+
+.terminal-cursor.is-active {
   animation: blink 1s steps(2, start) infinite;
+  opacity: 1;
 }
 
 .sensei-rail {
@@ -739,13 +678,14 @@ input::placeholder {
   padding: 18px;
 }
 
-.rail-card-heading {
+.rail-card-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
 
-.rail-card-heading span {
+.rail-card-title span {
   display: grid;
   width: 23px;
   height: 23px;
@@ -753,12 +693,16 @@ input::placeholder {
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   color: var(--muted);
-  font: 9px/1 var(--mono);
+  font: 10px/1 var(--font-mono);
 }
 
 .rail-card h2 {
   margin-bottom: 18px;
   font-size: 19px;
+}
+
+.rail-card-title h2 {
+  margin-bottom: 18px;
 }
 
 .question-card {
@@ -856,7 +800,7 @@ input::placeholder {
 .hint > div span,
 .hint > div small {
   color: var(--muted);
-  font: 600 9px/1 var(--mono);
+  font: 600 9px/1 var(--font-mono);
 }
 
 .hint p {
@@ -870,7 +814,7 @@ input::placeholder {
   padding-left: 9px;
   border-left: 1px solid var(--line-strong);
   color: var(--faint);
-  font: 10px/1.55 var(--mono);
+  font: 10px/1.55 var(--font-mono);
 }
 
 .milestone,
@@ -953,7 +897,7 @@ input::placeholder {
   padding: 4px 7px;
   border: 1px solid var(--line);
   color: var(--muted);
-  font: 9px/1 var(--mono);
+  font: 9px/1 var(--font-mono);
 }
 
 .tag-group span.tag-weak {
@@ -1014,7 +958,6 @@ input::placeholder {
   color: var(--accent);
   box-shadow: 0 12px 42px rgba(0, 0, 0, 0.35);
   font-size: 12px;
-  animation: toast-in 180ms ease-out;
 }
 
 .tutorial-panel {
@@ -1037,8 +980,8 @@ input::placeholder {
 .markdown-body h2,
 .markdown-body h3 {
   color: var(--text);
-  font-family: var(--display);
-  font-weight: 540;
+  font-family: var(--font-sans);
+  font-weight: 500;
   line-height: 1.18;
 }
 
@@ -1064,7 +1007,7 @@ input::placeholder {
   padding: 2px 5px;
   background: var(--surface-soft);
   color: var(--accent);
-  font: 0.9em/1.5 var(--mono);
+  font: 0.9em/1.5 var(--font-mono);
 }
 
 .markdown-body pre {
@@ -1136,15 +1079,15 @@ input::placeholder {
 }
 
 .state-glyph.is-loading span {
-  animation: rotate 1s linear infinite;
+  border-color: var(--accent);
 }
 
 .centered-state h1 {
   margin: 18px 0 12px;
-  font: 520 38px/1.08 var(--display);
+  font: 500 38px/1.08 var(--font-sans);
 }
 
-.centered-state > p:not(.eyebrow) {
+.centered-state > p {
   max-width: 480px;
   margin: 0 0 23px;
   color: var(--muted);
@@ -1163,24 +1106,12 @@ input::placeholder {
   text-underline-offset: 4px;
 }
 
-@keyframes skeleton {
-  to { background-position: -200% 0; }
-}
-
 @keyframes signal {
   50% { box-shadow: 0 0 0 8px rgba(78, 224, 162, 0.03); }
 }
 
 @keyframes blink {
   50% { opacity: 0; }
-}
-
-@keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px); }
-}
-
-@keyframes rotate {
-  to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 @media (max-width: 980px) {
@@ -1233,11 +1164,11 @@ input::placeholder {
   }
 
   .home-intro {
-    min-height: 330px;
+    padding-top: 28px;
   }
 
   .home-intro h1 {
-    font-size: 44px;
+    font-size: 26px;
   }
 
   .session-join {
@@ -1246,17 +1177,13 @@ input::placeholder {
   }
 
   .session-section {
-    padding-top: 48px;
+    padding-top: 26px;
   }
 
   .session-card {
-    grid-template-columns: 12px 1fr 20px;
+    grid-template-columns: minmax(0, 1fr) 20px;
     gap: 12px;
     min-height: 116px;
-  }
-
-  .session-seq {
-    display: none;
   }
 
   .session-card-topline time {
@@ -1272,19 +1199,14 @@ input::placeholder {
   }
 
   .session-title-row h1 {
-    font-size: 36px;
-  }
-
-  .live-sequence {
-    display: none;
+    font-size: 24px;
   }
 
   .observation-bar {
-    grid-template-columns: 10px 1fr;
+    grid-template-columns: 1fr;
   }
 
   .observation-bar p {
-    grid-column: 1 / -1;
     white-space: normal;
   }
 

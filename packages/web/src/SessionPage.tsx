@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 import { db } from './firebase';
-import { StateBadge } from './HomePage';
+import { formatTime } from './HomePage';
 import type { ChunkData, HintData, HintLevel, NoteData, QuestionData, SessionData } from './types';
 
 interface SessionPageProps {
@@ -117,7 +117,7 @@ export function SessionPage({ sessionId, user, authReady, onSignIn }: SessionPag
         <CenteredState
           title="这个会话需要权限"
           detail={user ? '当前账号不是该会话的所有者。请切换账号，或让创建者将会话设为公开。' : '登录与会话关联的 Google 账号后即可查看。'}
-          action={user ? undefined : { label: 'Sign in with Google', onClick: onSignIn }}
+          action={user ? undefined : { label: '使用 Google 登录', onClick: onSignIn }}
         />
       );
     }
@@ -129,6 +129,8 @@ export function SessionPage({ sessionId, user, authReady, onSignIn }: SessionPag
     );
   }
 
+  const observation = getObservationCopy(session);
+
   return (
     <main className="session-page">
       <section className="session-hero">
@@ -138,20 +140,17 @@ export function SessionPage({ sessionId, user, authReady, onSignIn }: SessionPag
         <div className="session-title-row">
           <div>
             <div className="session-meta-line">
-              <StateBadge state={session.state} />
+              <span>{sessionStateCopy[session.state]}</span>
+              <span>{session.lastSeq ?? 0} 条</span>
+              <time>{formatTime(session.updatedAt?.toDate())}</time>
               <span className="mono-label">{session.id}</span>
             </div>
-            <h1>{session.goal || '未命名学习目标'}</h1>
-          </div>
-          <div className="live-sequence">
-            <span>LAST SEQ</span>
-            <strong>{session.lastSeq ?? 0}</strong>
+            <h1 title={session.goal || '未命名学习目标'}>{session.goal || '未命名学习目标'}</h1>
           </div>
         </div>
         <div className="observation-bar">
-          <span className={`observation-signal ${session.state === 'active' ? 'is-live' : ''}`} aria-hidden="true" />
-          <strong>{session.status ? statusCopy[session.status] : '等待判断'}</strong>
-          <p>{session.lastObservation || 'Sensei 正在观察终端中的学习进展。'}</p>
+          <strong>{observation.label}</strong>
+          {observation.detail ? <p>{observation.detail}</p> : null}
         </div>
       </section>
 
@@ -167,7 +166,7 @@ export function SessionPage({ sessionId, user, authReady, onSignIn }: SessionPag
           onClick={() => setTab('tutorial')}
           disabled={!session.tutorial}
         >
-          编译教程 {session.tutorial ? <span className="tab-ready">READY</span> : null}
+          编译教程 {session.tutorial ? <span className="tab-ready">已生成</span> : null}
         </button>
       </div>
 
@@ -175,7 +174,7 @@ export function SessionPage({ sessionId, user, authReady, onSignIn }: SessionPag
 
       {tab === 'live' ? (
         <div className="live-grid">
-          <TerminalStream chunks={chunks} />
+          <TerminalStream chunks={chunks} active={session.state === 'active'} />
           <aside className="sensei-rail">
             <QuestionsPanel questions={questions} sessionId={sessionId} user={user} onSent={() => showToast('回答已发送')} />
             <HintsPanel hints={hints} />
@@ -202,7 +201,22 @@ const statusCopy: Record<NonNullable<SessionData['status']>, string> = {
   done: '学习完成',
 };
 
-function TerminalStream({ chunks }: { chunks: ChunkData[] }) {
+const sessionStateCopy: Record<SessionData['state'], string> = {
+  active: '进行中',
+  ended: '已结束',
+  compiled: '已编译',
+};
+
+function getObservationCopy(session: SessionData): { label: string; detail?: string } {
+  if (session.state === 'compiled') return { label: '教程已生成' };
+  if (session.state === 'ended') return { label: '会话已结束', detail: session.lastObservation };
+  return {
+    label: session.status ? `正在观察：${statusCopy[session.status]}` : '正在观察',
+    detail: session.lastObservation,
+  };
+}
+
+function TerminalStream({ chunks, active }: { chunks: ChunkData[]; active: boolean }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -220,19 +234,22 @@ function TerminalStream({ chunks }: { chunks: ChunkData[] }) {
   return (
     <section className="terminal-panel" aria-labelledby="terminal-title">
       <div className="panel-heading terminal-heading">
-        <div>
-          <p className="panel-kicker">STREAM / 400</p>
+        <div className="terminal-title">
           <h2 id="terminal-title">终端流</h2>
+          <span className="stream-state">
+            <span className={`observation-signal ${active ? 'is-live' : ''}`} aria-hidden="true" />
+            {active ? '实时' : '已结束'}
+          </span>
         </div>
         <button className={`autoscroll-control ${autoScroll ? 'is-on' : ''}`} type="button" onClick={() => setAutoScroll(true)}>
-          <span /> {autoScroll ? '跟随输出' : '继续跟随'}
+          {autoScroll ? '跟随输出' : '继续跟随'}
         </button>
       </div>
       <div className="terminal-window" ref={scrollerRef} onScroll={detectScrollPause}>
         {chunks.length === 0 ? (
           <div className="terminal-empty">
-            <span className="terminal-cursor" />
-            <p>等待终端输出…</p>
+            <span className={`terminal-cursor ${active ? 'is-active' : ''}`} />
+            <p>{active ? '等待终端输出…' : '本次会话没有终端输出'}</p>
           </div>
         ) : (
           chunks.map((chunk) => <TerminalChunk key={chunk.id} chunk={chunk} />)
@@ -246,7 +263,7 @@ function TerminalChunk({ chunk }: { chunk: ChunkData }) {
   if (chunk.kind === 'agent' || chunk.kind === 'user') {
     return (
       <div className={`terminal-bubble bubble-${chunk.kind}`}>
-        <span>{chunk.kind === 'agent' ? 'SENSEI' : 'YOU'}</span>
+        <span>{chunk.kind === 'agent' ? 'Sensei' : '你'}</span>
         <pre>{chunk.text}</pre>
       </div>
     );
@@ -289,11 +306,10 @@ function QuestionsPanel({ questions, sessionId, user, onSent }: { questions: Que
   if (openQuestions.length === 0) return null;
   return (
     <section className="rail-card question-card" aria-labelledby="questions-title">
-      <div className="rail-card-heading">
-        <p>需要你的判断</p>
+      <div className="rail-card-title">
+        <h2 id="questions-title">Sensei 在问</h2>
         <span>{openQuestions.length}</span>
       </div>
-      <h2 id="questions-title">Sensei 在问</h2>
       {openQuestions.map((question) => (
         <form key={question.id} className="question-form" onSubmit={(event) => submitAnswer(event, question.id)}>
           <p>{question.text}</p>
@@ -321,18 +337,17 @@ function QuestionsPanel({ questions, sessionId, user, onSent }: { questions: Que
 function HintsPanel({ hints }: { hints: HintData[] }) {
   return (
     <section className="rail-card" aria-labelledby="hints-title">
-      <div className="rail-card-heading">
-        <p>COACH SIGNAL</p>
+      <div className="rail-card-title">
+        <h2 id="hints-title">Sensei 提示</h2>
         <span>{hints.length}</span>
       </div>
-      <h2 id="hints-title">Sensei 提示</h2>
       {hints.length === 0 ? <p className="rail-empty">暂时没有提示，继续探索。</p> : null}
       <div className="hint-list">
         {[...hints].reverse().slice(0, 8).map((hint) => (
           <article className={`hint hint-${hint.level}`} key={hint.id}>
             <div>
               <span>{hintLabels[hint.level]}</span>
-              <small>SEQ {hint.atSeq}</small>
+              <small>第 {hint.atSeq} 条</small>
             </div>
             <p>{hint.text}</p>
             {hint.evidence ? <blockquote>{hint.evidence}</blockquote> : null}
@@ -355,11 +370,10 @@ function NotesPanel({ notes }: { notes: NoteData[] }) {
   const regularNotes = notes.filter((note) => note.kind === 'note');
   return (
     <section className="rail-card" aria-labelledby="notes-title">
-      <div className="rail-card-heading">
-        <p>LEARNING TRACE</p>
+      <div className="rail-card-title">
+        <h2 id="notes-title">笔记与里程碑</h2>
         <span>{notes.length}</span>
       </div>
-      <h2 id="notes-title">笔记与里程碑</h2>
       {notes.length === 0 ? <p className="rail-empty">Sensei 还没有记下关键节点。</p> : null}
       {milestones.map((note) => (
         <div className="milestone" key={note.id}>
@@ -380,9 +394,6 @@ function NotesPanel({ notes }: { notes: NoteData[] }) {
 function ProfileCard({ profile }: { profile?: SessionData['profile'] }) {
   return (
     <section className="rail-card profile-card" aria-labelledby="profile-title">
-      <div className="rail-card-heading">
-        <p>LEARNER PROFILE</p>
-      </div>
       <h2 id="profile-title">当前画像</h2>
       {!profile ? <p className="rail-empty">画像会随反馈逐步形成。</p> : null}
       {profile ? (
@@ -418,7 +429,7 @@ function TutorialPanel({ markdown, onCopied }: { markdown: string; onCopied: () 
   return (
     <section className="tutorial-panel">
       <div className="tutorial-toolbar">
-        <div><p>COMPILED OUTPUT</p><h2>学习教程</h2></div>
+        <h2>学习教程</h2>
         <button className="button button-primary" type="button" onClick={copyMarkdown}>复制 Markdown</button>
       </div>
       <article className="markdown-body">
@@ -440,7 +451,7 @@ function FeedbackBar({ onFeedback }: { onFeedback: (value: FeedbackValue) => Pro
   }
   return (
     <section className="feedback-bar" aria-labelledby="feedback-title">
-      <div><p>ADJUST THE COACH</p><h2 id="feedback-title">这一步讲得怎样？</h2></div>
+      <h2 id="feedback-title">这一步讲得怎样？</h2>
       <div className="feedback-actions">
         {feedbackOptions.map((option) => (
           <button key={option.value} type="button" disabled={busy !== null} onClick={() => send(option.value)}>
@@ -479,7 +490,6 @@ function CenteredState({ title, detail, loading = false, action }: CenteredState
   return (
     <main className="centered-state">
       <div className={`state-glyph ${loading ? 'is-loading' : ''}`} aria-hidden="true"><span /></div>
-      <p className="eyebrow">SESSION LINK</p>
       <h1>{title}</h1>
       <p>{detail}</p>
       {action ? <button className="button button-primary" type="button" onClick={action.onClick}>{action.label}</button> : null}
