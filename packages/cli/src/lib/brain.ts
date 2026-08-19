@@ -169,6 +169,39 @@ export class Brain {
     }
   }
 
+  /** 面板写进 Firestore inbound 的消息 → 走同一套路由 */
+  attachInbound(): void {
+    if (!this.o.cloud) return;
+    this.o.cloud.onInbound((m) => {
+      const who = m.by ? ` (${m.by})` : '';
+      switch (m.kind) {
+        case 'reply':
+          if (m.text) {
+            this.o.say(`panel reply${who}: ${m.text}`, 'info');
+            void this.handle('/reply', { text: m.text }).catch(() => undefined);
+          }
+          break;
+        case 'feedback':
+          if (m.value) {
+            this.o.say(`panel feedback${who}: ${m.value}`, 'info');
+            void this.handle('/fb', { value: m.value }).catch(() => undefined);
+          }
+          break;
+        case 'note':
+          if (m.text) void this.handle('/note', { text: m.text }).catch(() => undefined);
+          break;
+        case 'ask':
+          if (m.text) {
+            this.o.say(`panel asks${who}: ${m.text}`, 'info');
+            void this.handle('/ask', { text: m.text })
+              .then((r) => this.o.say(String((r as { answer: string }).answer), 'explain'))
+              .catch((e) => this.o.say(`could not answer: ${String((e as Error).message)}`, 'error'));
+          }
+          break;
+      }
+    });
+  }
+
   /** IPC 路由 */
   async handle(route: string, body: Record<string, unknown>): Promise<unknown> {
     const text = String(body.text ?? '').trim();

@@ -15,6 +15,8 @@ export interface StartOptions {
   quiet?: boolean;
   offline?: boolean;
   noAgent?: boolean;
+  /** 会话在面板上对所有人可见（演示/评委用） */
+  public?: boolean;
 }
 
 function defaultShell(): string {
@@ -85,8 +87,14 @@ export async function start(opts: StartOptions) {
   });
 
   const startMeta = { shell, cwd: process.cwd(), platform: process.platform, goal: opts.goal ?? null };
-  log.append('meta', 'session.start', startMeta);
-  cloud?.start({ ...startMeta, learnerId: brain.profile.id });
+  log.append('meta', 'session.start', { ...startMeta, public: !!opts.public });
+  cloud?.start({
+    ...startMeta,
+    learnerId: brain.profile.id,
+    public: !!opts.public,
+    ownerEmail: process.env.SENSEI_OWNER_EMAIL || null,
+  });
+  brain.attachInbound();
 
   // 输出流：镜像到真实终端 + 清洗/脱敏后进日志和大脑
   const outChunker = new Chunker((raw) => {
@@ -131,7 +139,7 @@ export async function start(opts: StartOptions) {
       `[sensei] watching · session ${sessionId}`,
       `[sensei] log → ${log.file}`,
       opts.goal ? `[sensei] goal: ${opts.goal}` : `[sensei] no goal given — I'll infer it (or: sensei start -g "what you're learning")`,
-      cloud ? `[sensei] cloud: on (${cfg.projectId})` : `[sensei] cloud: off`,
+      cloud ? `[sensei] cloud: on (${cfg.projectId})${opts.public ? ' · PUBLIC session' : ''}` : `[sensei] cloud: off`,
       brain.llmReady ? `[sensei] agent: ${cfg.model}` : `[sensei] agent: OFF — ${brain.llmProblem}`,
       `[sensei] in this shell: sensei ask "…" · sensei reply "…" · sensei note "…" · sensei fb too-basic|confusing|just-tell-me|let-me-try · sensei done`,
       `[sensei] type "exit" to finish`,

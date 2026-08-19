@@ -20,6 +20,7 @@ program
   .option('-q, --quiet', 'no banner')
   .option('--offline', 'do not mirror to Firestore')
   .option('--no-agent', 'record only; the observer stays silent')
+  .option('--public', 'make this session visible to anyone on the web panel (demo mode)')
   .action((opts) => start({ ...opts, noAgent: opts.agent === false }));
 
 const fail = (e: unknown) => {

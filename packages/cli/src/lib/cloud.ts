@@ -8,6 +8,10 @@ export interface SessionMeta {
   cwd: string;
   platform: string;
   learnerId: string;
+  /** 面板：public 会话谁都能看（演示用） */
+  public: boolean;
+  /** 面板：非 public 时只有这个 Google 邮箱能看 */
+  ownerEmail: string | null;
 }
 
 export type HintLevel = 'nudge' | 'hint' | 'explain' | 'fix';
@@ -22,6 +26,15 @@ export interface Hint {
 export interface Question {
   text: string;
   atSeq: number;
+}
+
+export interface InboundMessage {
+  id: string;
+  kind: 'reply' | 'feedback' | 'note' | 'ask';
+  text?: string;
+  value?: string;
+  questionId?: string;
+  by?: string;
 }
 
 /**
@@ -134,9 +147,9 @@ export class CloudStore {
     );
   }
 
-  /** 监听面板/另一端写进来的回答与指令 */
-  onInbound(handler: (kind: string, payload: Record<string, unknown>, id: string) => void): () => void {
-    const since = new Date();
+  /** 监听面板写进来的回答 / 反馈 / 提问（sessions/{id}/inbound） */
+  onInbound(handler: (msg: InboundMessage) => void): () => void {
+    const since = new Date(Date.now() - 5000);
     return this.ref
       .collection('inbound')
       .where('ts', '>', since)
@@ -145,11 +158,18 @@ export class CloudStore {
           for (const ch of snap.docChanges()) {
             if (ch.type !== 'added') continue;
             const d = ch.doc.data();
-            handler(String(d.kind ?? 'reply'), d, ch.doc.id);
+            handler({
+              id: ch.doc.id,
+              kind: (['reply', 'feedback', 'note', 'ask'].includes(String(d.kind)) ? d.kind : 'note') as InboundMessage['kind'],
+              text: typeof d.text === 'string' ? d.text : undefined,
+              value: typeof d.value === 'string' ? d.value : undefined,
+              questionId: typeof d.questionId === 'string' ? d.questionId : undefined,
+              by: typeof d.by === 'string' ? d.by : undefined,
+            });
           }
         },
-        () => {
-          /* 监听断了不致命 */
+        (e) => {
+          process.stderr.write(`\n[sensei] inbound listener stopped: ${String(e.message).slice(0, 100)}\n`);
         },
       );
   }
