@@ -51,24 +51,25 @@ test('redactor: basic auth is case-insensitive', async () => {
 
 
 
-test('isEchoHint final: verbatim-only suppression', async () => {
+test('isEchoHint final: strict equality (trim only)', async () => {
   const { isEchoHint } = await import('../src/lib/brain.js');
-  // 逐字相同（大小写/空白差异忽略）→ 抑制
-  assert.ok(isEchoHint('请不要跳过 npm install 这一步。', '请不要跳过  npm install 这一步。'));
-  assert.ok(isEchoHint('Run NPM install first.', 'run npm install first.'));
-  // codex 六轮对抗全部反例：任何语义可能不同的都放行（返回 false）
+  // 只有首尾空白差异 → 抑制
+  assert.ok(isEchoHint('请不要跳过 npm install 这一步。', '  请不要跳过 npm install 这一步。 '));
+  assert.ok(isEchoHint('Run npm install first.', 'Run npm install first.'));
+  // 空格/大小写本身就是纠正内容（codex 末验四连）→ 一律放行
   const pairs: Array<[string, string]> = [
+    ['把命令改成 npminstall 再试。', '把命令改成 npm install 再试。'],
+    ['试试 git checkoutmain。', '试试 git checkout main。'],
+    ['把文件名改成 Foo.ts。', '把文件名改成 foo.ts。'],
+    ['环境变量写 API_KEY。', '环境变量写 api_key。'],
+    ['请不要跳过 npm install 这一步。', '请不要跳过  npm install 这一步。'],
+    ['Run NPM install first.', 'run npm install first.'],
+    // 六轮语义反例继续站岗
     ['把 src/index.ts 里的端口改成 3001。', '把 src/index.ts 里的端口改成 3002。'],
-    ['请先运行 npm install 再启动服务。', '请先不要运行 npm install，先检查 package.json。'],
-    ['Run npm install first.', "Don't run npm install first."],
-    ['先检查 npm install 日志，不要跳过测试，然后运行 npm install。', '先检查 npm install 日志，不要跳过测试，然后不要运行 npm install。'],
     ['Run npm install in dev; never run npm install in prod.', 'Never run npm install in dev; run npm install in prod.'],
-    ['Never run npm install in dev and run npm test in prod.', 'Run npm install in dev and never run npm test in prod.'],
     ['开发环境不要运行 npm install 但生产环境运行 npm test。', '开发环境运行 npm install 但生产环境不要运行 npm test。'],
-    ['Do not delete cache and restart the server.', 'Delete cache and do not restart the server.'],
     ['千万别在生产环境跑这个脚本，先在本地跑。', '在生产环境跑这个脚本，千万别先在本地跑。'],
     ['You cannot skip the build step.', 'You can skip the build step.'],
-    // 换皮复读也放行——由冷却/prompt 纪律/hintsGiven 历史兜底
     ['请在 package.json 中添加 "type": "module" 配置。', '请打开 package.json，加上 "type": "module" 配置。'],
   ];
   for (const [a, b] of pairs) assert.ok(!isEchoHint(a, b), a.slice(0, 24));

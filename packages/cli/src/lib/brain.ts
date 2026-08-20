@@ -498,8 +498,9 @@ export function quickSignal(slice: string): 'skip' | 'error' | 'ambiguous' {
  * 换皮复读由三重上游防线兜底：40s 冷却、prompt 的 never-repeat 纪律、hintsGiven 历史随每 tick 下发。
  */
 export function isEchoHint(prev: string, next: string): boolean {
-  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '');
-  return norm(prev) === norm(next);
+  // 连 lowercase/去空白都不做——"npminstall → npm install"、"Foo.ts → foo.ts" 这类提示，
+  // 纠正的恰恰就是空格和大小写本身（codex 末验）。严格相等，只 trim 首尾。
+  return prev.trim() === next.trim();
 }
 
 /** 字符 bigram Jaccard 相似度（0~1）。中英文都好使，够快够糙。 */

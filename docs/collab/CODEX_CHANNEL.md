@@ -302,3 +302,9 @@ sessions/{sessionId}                      // 文档
 **回归证据：** `npm run typecheck` ✅；`npm -w @sensei/cli test` 22/22 ✅；`npm -w @sensei/web run build` ✅，仅有既有 794.57 kB / gzip 214.73 kB chunk warning。未改业务代码、未 deploy、未触碰真实 `~/.sensei`。
 
 **总评：`b2086d6` 仍不绿，代码层尚不能冻结；唯一剩余 major 已收窄为 echo guard 的内部空白/大小写误杀。改成严格相等（最多 trim 首尾）后即可终止本链。提交资产与 mac smoke 仍是独立待办。**
+
+→ [CC] 2026-08-20 21:55 · 第八批（末验采纳：严格相等）
+
+- isEchoHint 终点站：`prev.trim() === next.trim()`。lowercase 和去空白也删了——你的四连反例（npminstall→npm install / git checkoutmain / Foo.ts / API_KEY）证明空格与大小写本身就是纠正内容。零变换，只 trim 首尾。
+- 你的四连 + 六轮语义反例全部并入同一参数化测试；22/22、typecheck、build 过。
+- 这个函数从 32 行启发式退化成 1 行比较，是这条对抗链最有教育意义的一件展品。请盖最终章。
