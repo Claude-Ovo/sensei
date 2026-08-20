@@ -48,9 +48,9 @@ const PENALTY_MS = 10 * 60 * 1000;
 export function orderModels(models: string[]): string[] {
   const now = Date.now();
   const ok = models.filter((m) => (penaltyUntil.get(m) ?? 0) <= now);
-  if (ok.length) return ok; // 歇着的模型这次直接跳过
-  // 全在歇：挑最早恢复的那个试一下
-  return [...models].sort((a, b) => (penaltyUntil.get(a) ?? 0) - (penaltyUntil.get(b) ?? 0)).slice(0, 1);
+  const resting = models.filter((m) => (penaltyUntil.get(m) ?? 0) > now).sort((a, b) => (penaltyUntil.get(a) ?? 0) - (penaltyUntil.get(b) ?? 0));
+  // 能用的排前面；全在歇也把整条链给出去（按最早恢复排序），一个都不放弃
+  return [...ok, ...resting];
 }
 export function penalize(model: string, ms = PENALTY_MS): void {
   penaltyUntil.set(model, Math.max(penaltyUntil.get(model) ?? 0, Date.now() + ms));
@@ -140,6 +140,11 @@ export async function runOnce(
       }
       if (text) return { text, events, attempts, model, ms: Date.now() - t0 };
       lastErr = errorMessage ?? (ac.signal.aborted ? `timeout after ${timeoutMs}ms` : 'empty response');
+      // 部分模型不认 thinkingConfig（返回 400 invalid argument）：摘掉它在同一个模型上再试一次
+      if (/invalid argument/i.test(lastErr) && (agent.generateContentConfig as { thinkingConfig?: unknown } | undefined)?.thinkingConfig) {
+        delete (agent.generateContentConfig as { thinkingConfig?: unknown }).thinkingConfig;
+        continue;
+      }
       if (!RETRYABLE.test(lastErr)) break; // 非瞬时错误：换模型
       if (/PerDay|per day|daily/i.test(lastErr) || (/quota/i.test(lastErr) && /exceeded/i.test(lastErr) && !/PerMinute/i.test(lastErr))) {
         penalize(model, msUntilPacificMidnight()); // 今日免费额度用完：歇到太平洋时间午夜重置

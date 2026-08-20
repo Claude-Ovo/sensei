@@ -9,14 +9,14 @@ test('extractJson tolerates fences, prefixes and trailing prose', () => {
   assert.equal(extractJson(''), null);
 });
 
-test('orderModels skips resting models and falls back to the soonest when all rest', () => {
+test('orderModels puts resting models last, sorted by soonest recovery, dropping none', () => {
   const models = ['m-a', 'm-b', 'm-c'];
   assert.deepEqual(orderModels(models), models);
   penalize('m-a', 60_000);
-  assert.deepEqual(orderModels(models), ['m-b', 'm-c']);
+  assert.deepEqual(orderModels(models), ['m-b', 'm-c', 'm-a']);
   penalize('m-b', 120_000);
   penalize('m-c', 30_000);
-  assert.deepEqual(orderModels(models), ['m-c']);
+  assert.deepEqual(orderModels(models), ['m-c', 'm-a', 'm-b']);
 });
 
 test('msUntilPacificMidnight is within a day and positive', () => {

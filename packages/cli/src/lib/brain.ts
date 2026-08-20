@@ -53,6 +53,9 @@ export class Brain {
   private lastFullObserveAt = 0;
   private lastHintAt = 0;
   private lastHintSeq = 0;
+  private lastInText = '';
+  private lastAutoAsked = '';
+  private autoAskBusy = false;
   private lastObservedSeq = 0;
   private startedAt = Date.now();
   private llmError: string | null = null;
@@ -82,7 +85,33 @@ export class Brain {
   ingest(c: Chunk): void {
     this.transcript.push(c);
     this.o.cloud?.chunk(c);
+    if (c.kind === 'in') this.lastInText = c.text;
+    if (c.kind === 'out') this.maybeAutoAsk(c.text);
     if (c.kind === 'out' || c.kind === 'in') this.schedule();
+  }
+
+  /**
+   * 她教会我们的功能：学习者会直接在终端里打自然语言（"这个错到底怎么回事"）。
+   * shell 报"无法识别命令"时，如果上一条输入长得像人话，就把它当 sensei ask 接住，
+   * 并顺便教一次正确用法。每条输入只接一次。
+   */
+  private maybeAutoAsk(out: string): void {
+    if (!this.coach || this.autoAskBusy) return;
+    const q = this.lastInText;
+    if (!q || q === this.lastAutoAsked) return;
+    const cmdNotFound = /CommandNotFoundException|is not recognized as (the name of )?a cmdlet|command not found|无法将.{0,60}识别为/i.test(out);
+    if (!cmdNotFound) return;
+    const natural = /[一-鿿]/.test(q) || /[?？]\s*$/.test(q) || /^(what|why|how|where|help|explain|please)\b/i.test(q);
+    if (!natural || /^sensei\b/i.test(q)) return;
+    this.lastAutoAsked = q;
+    this.autoAskBusy = true;
+    this.o.say(`这句我当问题接了（下次可以直接：sensei ask "${q.slice(0, 40)}"）`, 'info');
+    void this.handle('/ask', { text: q })
+      .then((r) => this.o.say(String((r as { answer: string }).answer), 'explain'))
+      .catch((e) => this.o.say(`没答上来：${String((e as Error).message).slice(0, 80)}`, 'error'))
+      .finally(() => {
+        this.autoAskBusy = false;
+      });
   }
 
   private schedule(): void {
@@ -193,7 +222,11 @@ export class Brain {
       // 冷却：刚说过话（40s 内）且这段里没有新的报错/用户消息 → 这次不开口，只记笔记
       const sinceLastHint = Date.now() - this.lastHintAt;
       const fresh = quickSignal(this.transcript.since(this.lastHintSeq)) === 'error';
-      if (sinceLastHint < 40_000 && !fresh) {
+      // 复读机守卫：跟最近两条提示意思雷同（字符 bigram 相似度高）就闭嘴——同一个坑反复触发"新错误"时冷却拦不住它
+      const echo = this.hintsGiven.slice(-2).some((h) => bigramSimilarity(h, obs.hint!.text) > 0.55);
+      if (echo) {
+        this.o.log.append('meta', 'hint.suppressed', { text: obs.hint.text.slice(0, 120), reason: 'echo' });
+      } else if (sinceLastHint < 40_000 && !fresh) {
         this.o.log.append('meta', 'hint.suppressed', { text: obs.hint.text.slice(0, 120), sinceLastHint });
       } else {
         this.hintsGiven.push(obs.hint.text);
@@ -364,6 +397,22 @@ export function quickSignal(slice: string): 'skip' | 'error' | 'ambiguous' {
   if (/\[user → sensei\]/.test(text)) return 'error';
   if (/\b(error|fatal|exception|traceback|panic|denied|not found|no such file|cannot|can't|failed|failure|unrecognized|not recognized|command not found|ENOENT|EACCES|EADDRINUSE|npm ERR!|SyntaxError|TypeError|ReferenceError|segfault|exit code [1-9])\b/i.test(text)) return 'error';
   return 'ambiguous';
+}
+
+/** 字符 bigram Jaccard 相似度（0~1）。中英文都好使，够快够糙。 */
+export function bigramSimilarity(a: string, b: string): number {
+  const grams = (s: string) => {
+    const t = s.replace(/\s+/g, '');
+    const set = new Set<string>();
+    for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2));
+    return set;
+  };
+  const A = grams(a);
+  const B = grams(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const g of A) if (B.has(g)) inter++;
+  return inter / (A.size + B.size - inter);
 }
 
 function publicProfile(p: LearnerProfile) {
