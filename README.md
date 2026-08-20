@@ -5,23 +5,23 @@
 **All Things Agentic Hackathon 2026 · Collaborative Partner track**
 Built with Gemini 3.7 Flash · Google ADK (TypeScript) · Cloud Firestore · Firebase Hosting
 
-**Live panel:** https://sensei-agent.web.app  ·  Demo video: added at submission
+**Live panel:** https://sensei-agent.web.app  ·  Demo video: to be added at submission
 
 <!-- TODO: demo video link at submission -->
 
 ## The friction
 
-Learning a CLI tool (git, Docker, an MCP server, a build system…) is mostly *doing*: you type, it errors, you google, you try again. Chat assistants sit in another window and only know what you paste. Nobody watches the actual stream, nobody remembers what you tried, and when you finally get it working the knowledge evaporates.
+Learning a CLI tool (git, Docker, an MCP server, a build system…) is mostly *doing*: you type, it fails, you search, and you try again. Chat assistants sit in another window and know only what you paste. Nobody watches the actual stream or remembers what you tried, and by the time you get it working, the knowledge has evaporated.
 
 Sensei fixes that by living **inside** the terminal session:
 
 - `sensei start` wraps your shell. Everything you type and everything the terminal prints is captured (locally redacted first — keys, tokens, emails, home paths never leave the machine).
-- A background **Observer** agent (Gemini 3.5 Flash-Lite via the Google ADK, with automatic fallback to 3.7 Flash) reads the messy stream — ANSI, stack traces, progress bars — and decides, on evidence, whether you're flowing, exploring, or stuck. It stays silent by default. When it speaks, it's one line, in your language, at the level you asked for.
+- A background **Observer** agent (Gemini 3.5 Flash-Lite via the Google ADK, with automatic fallback to 3.7 Flash) reads the messy stream — ANSI, stack traces, progress bars — and uses evidence to decide whether you're flowing, exploring, or stuck. It stays silent by default. When it speaks, it gives you one line, in your language, at the level you requested.
 - It **asks a clarifying question** only when the right hint depends on your intent.
-- It **takes notes** the whole time (what was tried, what failed, why, what worked) and captures **feedback** (`too-basic`, `confusing`, `just-tell-me`, `let-me-try`) into a learner profile so it adapts to how you think.
+- It **takes notes** throughout the session (what you tried, what failed, why, and what worked) and records **feedback** (`too-basic`, `confusing`, `just-tell-me`, `let-me-try`) in a learner profile, allowing it to adapt to how you think.
 - `sensei done` runs the **Compiler** agent: the entire session — commands, errors, notes, milestones, Q&A — is synthesized into a step-by-step tutorial with a "pitfalls we hit" table and a 60-second spoken script. You learned it; now you can teach it.
 - **Three-stage gate** (free regex → cheap Gemma triage → Gemini Observer) keeps it silent by default; a **hint ladder** escalates nudge → direction → cause → fix as failures repeat (prompt-driven against the transcript and learner profile, guarded by a cooldown and an echo filter); and **auto-ask** — a feature our first zero-background user taught us — catches natural language typed straight into the shell and answers it as a question.
-- A **web panel** (Firebase Hosting) shows the live session, hints, notes, questions, the learner profile and the compiled tutorial — for you on a second screen, or for a mentor/reviewer watching along.
+- A **web panel** (Firebase Hosting) shows the live session, hints, notes, questions, learner profile, and compiled tutorial — whether you're following along on a second screen or a mentor or reviewer is watching.
 
 ## Architecture
 
@@ -30,13 +30,13 @@ Sensei fixes that by living **inside** the terminal session:
 
 Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Why the agent runs next to the terminal instead of in a server: the terminal stream is the data source and it lives on your machine; the API key stays on your machine; Firestore is the shared brain and realtime bus; the panel is a pure client of Firestore. (A Cloud Run deployment of the same agents is documented below as an optional variant.)
+Why the agent runs alongside the terminal instead of on a server: the terminal stream is the data source, and it lives on your machine. The API key stays there too. Firestore serves as the shared brain and realtime bus, while the panel is a pure Firestore client. (An optional Cloud Run deployment of the same agents is outlined below.)
 
 ## Quickstart
 
 Requirements: Node ≥ 24, a Gemini API key, a Firebase project with Firestore (optional — without it Sensei runs fully offline and still coaches you).
 
-> Platform notes: developed and fully tested on **Windows 10/11 (PowerShell)**. macOS/Linux use the same node-pty pty layer and default to `$SHELL`; on Linux, `npm install` compiles node-pty from source, so you need Python 3 + make + a C++ toolchain (`apt install build-essential python3`). macOS/Linux smoke coverage is thinner than Windows — issues welcome.
+> Platform notes: Sensei was developed and fully tested on **Windows 10/11 (PowerShell)**. macOS and Linux use the same node-pty layer and default to `$SHELL`. On Linux, `npm install` compiles node-pty from source, so you need Python 3, make, and a C++ toolchain (`apt install build-essential python3`). Smoke-test coverage on macOS and Linux is less extensive than on Windows — issues are welcome.
 
 ```bash
 git clone https://github.com/Claude-Ovo/sensei.git && cd sensei
@@ -74,7 +74,7 @@ exit
 
 ## Commands
 
-| command | what it does |
+| Command | Description |
 |---|---|
 | `sensei start [-g goal] [--public] [--offline] [--no-agent]` | wrap your shell and start watching |
 | `sensei ask "<question>"` | ask the Coach about what just happened |
