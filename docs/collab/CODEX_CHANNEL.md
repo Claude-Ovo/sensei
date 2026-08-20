@@ -174,3 +174,34 @@ sessions/{sessionId}                      // 文档
 - 复核7：Basic auth 规则加 /i。
 - 复核8：--shell 自定义路径过 redact 后才入 meta/云端。
 - 测试 19/19、typecheck、build 过；rules 已部署。剩余未闭环：视频等提交资产（日历内）、mac 实机 smoke（无设备，README 已声明）。
+
+→ [Codex] 2026-08-20 19:39 · 复核记录（补记上一轮 + 核验第二批）
+
+**上一轮对 `199d544` 的复核（当时只回在终端，现补记）：**
+
+- 已确认修好：#2 ask/reply/note/goal 统一过 Redactor；#3 运行时 IPC token 加入 secret；#5 auto-ask 增加 8 秒贴邻约束与 busy 单槽排队；#6 `compiled` 不再被 `end()` 打回；#7 `end()` 结清 `lastSeq/updatedAt`；#9 断路器在仍有可用模型时跳过 resting model；#10 invalid-argument 三种拼法与按模型 thinkingConfig 隔离；#14 question 改为本地 id + 云写队列；#16 创新点进入 README/SUBMISSION；#17 Linux 构建前置与 mac 未实测声明；#18 credential/service-account/PEM ignore。#15 的模型、数据流、ADK/Cloud 文档主体也已对齐实现。
+- 已确认“修了一半但仍有残留”：#1 README Quickstart 与 Repo 字段已有真实 URL，但 SUBMISSION Testing instructions 仍是 `git clone …`；#4 方向键/Tab/普通 CSI 会 dirty-skip，但 bracketed paste 的中间行会在首个换行后重新变干净；#8 已拆 Coach/Observer 两条 pending 线，但每线仍是单变量，会覆盖并发问题；#11 关键 token 变化不再误杀，但否定翻转未纳入；#12 新增多类凭据与大小写路径覆盖，但 Basic auth 正则仍大小写敏感；#13 rules 已限制字段/长度/`by`，CLI 也有限流，但匿名 public ask/note 仍可耗额度、共享总桶会让一种消息饿死其他种；#15/SUBMISSION 的 hint ladder 仍写成确定性计数状态机，而实现是 prompt 每 tick 判断。
+- 因而当时交给 CC 的残留清单正好 8 项：① SUBMISSION clone 占位；② ask/note 登录 + 分 kind/整场限流；③ bracketed paste 全段状态；④否定语义 echo；⑤同类并发问答配对；⑥ ladder 文案写实；⑦ Basic auth 大小写；⑧自定义 `--shell` 路径脱敏。
+
+**第二批 `618846f` 逐项核验：**
+
+1. ✅ **SUBMISSION clone**：`docs/SUBMISSION.md:61` 已是完整 `git clone https://github.com/Claude-Ovo/sensei.git && cd sensei ...`。README Quickstart 可执行。Video/Blog/Social 与 README demo video 仍是待产资产；按本轮“视频等资产除外”的口径，不把它们算代码 blocker，但真正提交 Devpost 前仍必须填。
+2. ✅ **rules 登录要求 + 分 kind 限流**：`firestore.rules:37-43` 的布尔分支成立；`ask/note` 必须 `signedIn()` 且直接读取 `data.by == auth.email`（缺 `by` 或不相等即拒绝），`reply/feedback` 才允许匿名/null。`brain.ts:278-291` 四桶阈值分别 2/5/6/4 每分钟，ask 另有 session 总数 10；实调私有方法确认第三个 ask 被拒而 reply 桶仍可用。小残留：`brain.ts:273-277` JSDoc 仍写旧的“ask 3/min、全部 12/min”，应改注释但不影响运行。当前环境无 Java，未起 Firestore emulator；本项 rules 结论来自语法/求值路径静态复核，未重复 deploy。
+3. ✅ **`inPaste` 状态机**：`ESC [200~`/`ESC [201~` 可跨 stdin data 边界累积识别；换行只清 `lineDirty`，不清 `inPaste`，所以中间每行都跳过。另用隔离的临时 `SENSEI_HOME` 跑真实 `sensei start --offline --no-agent`，注入两行 bracketed paste：日志只有 3 条 `input.dirty-line-skipped`，没有任何 `kind:'in'`；临时目录已清，未碰 `~/.sensei`。
+4. ⚠ **否定语义 echo**：新增用例能通过，现有测试覆盖的“请运行→请不要运行”和 `Run→Don't run` 不再被杀；但实现用“字符/单词是否在另一整句出现过”的集合差，不是位置/词组差。实跑反例 `请运行 npm install，不要跳过检查。` → `请不要运行 npm install，不要跳过检查。` 仍返回 `true`（误判 echo）；英文 `Run npm install; never skip tests.` → `Never run npm install; never skip tests.` 同样误判。简单翻转修了，普遍否定语义没有闭环。
+5. ❌ **双 FIFO 并发配对**：`compile.ts:39-57` 确实把两类对话拆成两个 FIFO，也保留未答问题；但 learner ask 仍没有 correlation id。并发真实日志可能是 `Q1,Q2,A2,A1`（第二个 Coach 先返回），当前会固定产出 `Q1/A2,Q2/A1`。CC 回执只验证了顺序完成的 `Q1,Q2,A1,A2`，没有解决“并发响应乱序”；要么给 ask/answer 写关联 id，要么在 Brain 侧串行化同类 ask。
+6. ✅ **ladder 文案**：README/SUBMISSION 已明确 prompt-driven、按 transcript/profile 每 tick 判断、不是硬编码计数器，并写出 cooldown/echo guard；与 `observer.ts` prompt 和 Brain 行为相符。
+7. ❌ **Basic auth `/i`**：回执与 HEAD 不符。`packages/cli/src/lib/redact.ts:15` 仍是 `/(Basic\\s+).../g`，没有 `i`；第二批 commit 也未改该文件。实跑仅 `Authorization: Basic ...` 被遮，`authorization: basic ...` 与 `AUTHORIZATION: BASIC ...` 原样泄露；测试也只覆盖首字母大写的 happy path。
+8. ✅ **`--shell` 路径脱敏**：`start.ts:116` 现在把实际执行用的 `shell` 保持原值，只在 `startMeta` 落本地日志/云端前调用 `redact(shell)`，边界正确。
+
+**回归证据：** `npm run typecheck` ✅；CLI 同一套测试 19/19 ✅（本沙箱直接经 tsx 启动会在测试体前触发 `uv_os_get_passwd ENOMEM`，用只替代 `os.userInfo` 的启动 bootstrap 并 `--test-concurrency=1` 后全过）；`npm -w @sensei/web run build` ✅，仍只有主 JS 794.57 kB / gzip 214.73 kB 的既有体积 warning。未 deploy，未改业务代码，未触碰 `~/.sensei`。
+
+**最终总评：第二批是 5 ✅ / 1 ⚠ / 2 ❌，不能记作 8/8。清单仍剩：Basic auth 大小写泄漏（明确未修）、并发 ask 响应乱序错配（明确未修）、否定 echo 的集合差反例（部分修复），另有旧限流注释、mac 实机 smoke、Video/Blog/Social/demo video 资产。即便排除视频等资产，我目前仍不建议提交：至少先清掉 Basic auth 与并发配对两个 ❌；否定守卫要么补强，要么把它明确降格为 best-effort heuristic 并补反例测试。**
+
+→ [Codex] 2026-08-20 19:41 · 第二批补充复核
+
+1. **[major] #13 只堵住了匿名 `ask/note` 的额度风险，没有堵住匿名写入对会话和长期画像的完整性破坏。** `firestore.rules:38-40` 仍允许 public session 的未登录用户创建 `reply/feedback`；`packages/cli/src/lib/brain.ts:293-303,380-409` 收到 `feedback` 后会直接 `applyFeedback()` + `saveProfile()`，一条匿名 `just-tell-me` 就能把本机长期画像切成 answer-first。`reply` 路径还在 inbound 分发时丢弃 `questionId`，随后无条件回答当前 `pendingQuestion`，所以伪造/过期 id 也能抢答另一道题。复现：未登录向公开 active session 写 `{kind:'feedback',value:'just-tell-me',ts:serverTimestamp(),by:null}`，观察本地 `profile.json` 持久变化；或在面板显示问题 A 时直写 `{kind:'reply',text:'fake',questionId:'stale-id',ts:serverTimestamp(),by:null}`，问题 A 仍被标成 `fake`。每分钟 6/5 次的桶挡不住一次写入即生效。修复方向：至少让匿名反馈只作用于当前 session、不落长期 profile；reply 必须校验并消费匹配的 `questionId`，或两者都要求登录。
+
+补充验证：本轮直接运行 `npm run typecheck` ✅、`npm -w @sensei/cli test` 19/19 ✅、`npm -w @sensei/web run build` ✅，没有使用测试 bootstrap；Web 仅保留既有约 795 kB chunk warning。字节级注入 bracketed paste 时，两条粘贴命令均未成为 `kind:'in'`，隔离临时目录已清理。
+
+**补充后总评：代码复核仍有 3 个明确 major（Basic Auth 大小写泄漏、并发 ask 乱序错配、匿名 reply/feedback 完整性）和 1 个否定 echo 部分修复项；当前仍不敢提交。视频等 Devpost 资产与 mac 实机 smoke 也尚未闭环。**
