@@ -81,3 +81,11 @@ test('isEchoHint multi-occurrence negation signatures: codex round-3 counterexam
     '先检查 npm install 日志，不要跳过测试，然后不要运行 npm install。',
   ));
 });
+
+test('isEchoHint clause signatures: codex round-4 counterexample (dev/prod polarity swap)', async () => {
+  const { isEchoHint } = await import('../src/lib/brain.js');
+  assert.ok(!isEchoHint(
+    'Run npm install in dev; never run npm install in prod.',
+    'Never run npm install in dev; run npm install in prod.',
+  ));
+});

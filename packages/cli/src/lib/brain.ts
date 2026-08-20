@@ -506,20 +506,21 @@ export function isEchoHint(prev: string, next: string): boolean {
   // 看它前面 10 个字符内有没有否定词；两句里任一 token 的否定签名不同 → 语义可能相反，不算复读。
   // 这抓得住 "请运行 X" vs "请不要运行 X"、"Run X" vs "Never run X"，包括句中其他位置本来就有否定词的情况；
   // 抓不住更远距离/更绕的否定——那类漏网宁可放行（多说一句好过压掉救命提示）。
-  const NEG = /[不别勿莫没]|\b(?:not|don'?t|never|no|avoid|stop)\s*$/i;
-  // 每个 token 的**所有出现位置**都取否定签名，按排序后的多重集合比较：
-  // 只看第一次出现会在"同一 token 多次出现、极性不同"时误判（漏放和误杀两个方向都堵，codex 三验 #3）
-  const negFlags = (s: string, token: string): string => {
-    const ls = s.toLowerCase();
-    const flags: boolean[] = [];
-    let i = ls.indexOf(token);
-    while (i >= 0) {
-      flags.push(NEG.test(s.slice(Math.max(0, i - 10), i)));
-      i = ls.indexOf(token, i + token.length);
-    }
-    return flags.sort().join(',');
+  // 否定语义（best-effort 启发式）：按标点切从句，只比较**被否定从句**的关键词集多重集。
+  // 直觉：否定作用在哪些词上才是语义关键——肯定部分怎么改写、怎么重新断句都算复读；
+  // 被否定的对象一变（"never … prod" 换成 "never … dev"），就是新提示，不许压。
+  // codex 四轮对抗的全部反例都在单测里站岗；再漏网的按"多说一句好过压掉纠正"处理。
+  const NEG_WORD = /^(?:not|don'?t|dont|no|never|avoid|stop)$/;
+  const negatedClauseSigs = (s: string): string => {
+    return s
+      .split(/[;,，。；、!?！？]/)
+      .map((c) => c.trim())
+      .filter((c) => c && /[不别勿莫没]|\b(?:not|don'?t|dont|never|avoid|stop)\b/i.test(c))
+      .map((c) => [...keyTokens(c)].filter((t) => !NEG_WORD.test(t)).sort().join('|'))
+      .sort()
+      .join(' ;; ');
   };
-  for (const t of A) if (negFlags(prev, t) !== negFlags(next, t)) return false;
+  if (negatedClauseSigs(prev) !== negatedClauseSigs(next)) return false;
   return true;
 }
 
