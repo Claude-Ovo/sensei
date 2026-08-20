@@ -26,14 +26,6 @@ test('bigramSimilarity catches paraphrased repeats, passes distinct hints', asyn
   assert.ok(bigramSimilarity(a, c) < 0.3);
 });
 
-test('isEchoHint: paraphrase is echo, changed key token is not', async () => {
-  const { isEchoHint } = await import('../src/lib/brain.js');
-  assert.ok(isEchoHint(
-    '请在 package.json 中添加 "type": "module" 配置，这样 Node.js 才能识别 import 语法。',
-    '请打开 package.json 文件，添加 "type": "module"，让 Node.js 识别 import 语法。',
-  ));
-  assert.ok(!isEchoHint('把 src/index.ts 里的端口改成 3001。', '把 src/index.ts 里的端口改成 3002。'));
-});
 
 test('redactor: basic auth, private key, AWS key, runtime secret, case-insensitive home', async () => {
   const { makeRedactor } = await import('../src/lib/redact.js');
@@ -47,22 +39,7 @@ test('redactor: basic auth, private key, AWS key, runtime secret, case-insensiti
   assert.equal(r('echo tok_runtime_secret_1'), 'echo <REDACTED>');
 });
 
-test('isEchoHint: negation flip is NOT an echo', async () => {
-  const { isEchoHint } = await import('../src/lib/brain.js');
-  assert.ok(!isEchoHint('请先运行 npm install 再启动服务。', '请先不要运行 npm install，先检查 package.json。'));
-  assert.ok(!isEchoHint('Run npm install first.', "Don't run npm install first."));
-  // 纯换皮复读仍然要被抓
-  assert.ok(isEchoHint('请在 package.json 中添加 "type": "module" 配置。', '请打开 package.json，加上 "type": "module" 配置。'));
-});
 
-test('isEchoHint negation signatures: codex counterexamples', async () => {
-  const { isEchoHint } = await import('../src/lib/brain.js');
-  // 两句都含"不要跳过检查"，但 npm install 的否定态翻转了 → 不是复读
-  assert.ok(!isEchoHint('请运行 npm install，不要跳过检查。', '请不要运行 npm install，不要跳过检查。'));
-  assert.ok(!isEchoHint('Run npm install; never skip tests.', 'Never run npm install; never skip tests.'));
-  // 保守边界：含否定词的提示不再抑制（宁可复读警告，绝不吞纠正）
-  assert.ok(!isEchoHint('请不要跳过 npm install 这一步。', '别跳过 npm install 这一步哦。'));
-});
 
 test('redactor: basic auth is case-insensitive', async () => {
   const { makeRedactor } = await import('../src/lib/redact.js');
@@ -71,38 +48,28 @@ test('redactor: basic auth is case-insensitive', async () => {
   assert.match(r('AUTHORIZATION: BASIC DXNLCJPWYXNZ00'), /BASIC <REDACTED_TOKEN>/);
 });
 
-test('isEchoHint multi-occurrence negation signatures: codex round-3 counterexamples', async () => {
-  const { isEchoHint } = await import('../src/lib/brain.js');
-  // 保守边界：含否定词 → 不抑制（哪怕只是分句换序）
-  assert.ok(!isEchoHint('Never run tests; run npm install.', 'Run npm install; never run tests.'));
-  // 第二处 npm install 极性反转 → 不是复读
-  assert.ok(!isEchoHint(
-    '先检查 npm install 日志，不要跳过测试，然后运行 npm install。',
-    '先检查 npm install 日志，不要跳过测试，然后不要运行 npm install。',
-  ));
-});
 
-test('isEchoHint clause signatures: codex round-4 counterexample (dev/prod polarity swap)', async () => {
-  const { isEchoHint } = await import('../src/lib/brain.js');
-  assert.ok(!isEchoHint(
-    'Run npm install in dev; never run npm install in prod.',
-    'Never run npm install in dev; run npm install in prod.',
-  ));
-});
 
-test('isEchoHint conservative boundary: codex round-5 triple + identical negated repeat', async () => {
+
+test('isEchoHint final: verbatim-only suppression', async () => {
   const { isEchoHint } = await import('../src/lib/brain.js');
-  assert.ok(!isEchoHint(
-    'Never run npm install in dev and run npm test in prod.',
-    'Run npm install in dev and never run npm test in prod.',
-  ));
-  assert.ok(!isEchoHint(
-    '开发环境不要运行 npm install 但生产环境运行 npm test。',
-    '开发环境运行 npm install 但生产环境不要运行 npm test。',
-  ));
-  assert.ok(!isEchoHint('Do not delete cache and restart the server.', 'Delete cache and do not restart the server.'));
-  // 逐字相同（含否定）的纯复读仍要抑制
+  // 逐字相同（大小写/空白差异忽略）→ 抑制
   assert.ok(isEchoHint('请不要跳过 npm install 这一步。', '请不要跳过  npm install 这一步。'));
-  // 无否定的换皮复读照常抑制（回归）
-  assert.ok(isEchoHint('请在 package.json 中添加 "type": "module" 配置。', '请打开 package.json，加上 "type": "module" 配置。'));
+  assert.ok(isEchoHint('Run NPM install first.', 'run npm install first.'));
+  // codex 六轮对抗全部反例：任何语义可能不同的都放行（返回 false）
+  const pairs: Array<[string, string]> = [
+    ['把 src/index.ts 里的端口改成 3001。', '把 src/index.ts 里的端口改成 3002。'],
+    ['请先运行 npm install 再启动服务。', '请先不要运行 npm install，先检查 package.json。'],
+    ['Run npm install first.', "Don't run npm install first."],
+    ['先检查 npm install 日志，不要跳过测试，然后运行 npm install。', '先检查 npm install 日志，不要跳过测试，然后不要运行 npm install。'],
+    ['Run npm install in dev; never run npm install in prod.', 'Never run npm install in dev; run npm install in prod.'],
+    ['Never run npm install in dev and run npm test in prod.', 'Run npm install in dev and never run npm test in prod.'],
+    ['开发环境不要运行 npm install 但生产环境运行 npm test。', '开发环境运行 npm install 但生产环境不要运行 npm test。'],
+    ['Do not delete cache and restart the server.', 'Delete cache and do not restart the server.'],
+    ['千万别在生产环境跑这个脚本，先在本地跑。', '在生产环境跑这个脚本，千万别先在本地跑。'],
+    ['You cannot skip the build step.', 'You can skip the build step.'],
+    // 换皮复读也放行——由冷却/prompt 纪律/hintsGiven 历史兜底
+    ['请在 package.json 中添加 "type": "module" 配置。', '请打开 package.json，加上 "type": "module" 配置。'],
+  ];
+  for (const [a, b] of pairs) assert.ok(!isEchoHint(a, b), a.slice(0, 24));
 });

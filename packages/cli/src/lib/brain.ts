@@ -489,35 +489,17 @@ export function quickSignal(slice: string): 'skip' | 'error' | 'ambiguous' {
   return 'ambiguous';
 }
 
-/** 两条提示是否算复读：文本相似度高，且关键 token（数字、代码标识符）没有变化 */
+/**
+ * 两条提示是否算复读——最终版：**只抑制规范化后逐字相同的提示**。
+ * 历史：这里曾有五代语义启发式（bigram 相似度 → 关键 token 集 → 否定签名 → 从句签名 → 否定门），
+ * codex 六轮对抗每一代都造出了"压掉语义相反纠正"的反例（3001/3002、never 翻转、dev/prod 互换、
+ * 千万别/cannot 漏检……）。结论：否定与语义等价没法用字符启发式可靠裁决，而这里的误杀代价是
+ * 吞掉纠正提示——安全相关。按"多说一句好过压掉纠正"收口为可证明保守的判据。
+ * 换皮复读由三重上游防线兜底：40s 冷却、prompt 的 never-repeat 纪律、hintsGiven 历史随每 tick 下发。
+ */
 export function isEchoHint(prev: string, next: string): boolean {
-  if (bigramSimilarity(prev, next) <= 0.55) return false;
-  const keyTokens = (s: string) =>
-    new Set(
-      (s.match(/\d+|[A-Za-z_][\w./:\\-]{2,}/g) ?? [])
-        .map((t) => t.toLowerCase().replace(/[./\\:-]+$/, '')) // 句尾标点别吞进 token："install." ≠ "install" 会误判集合不等
-        .filter((t) => t.length >= 2),
-    );
-  const A = keyTokens(prev);
-  const B = keyTokens(next);
-  for (const t of B) if (!A.has(t)) return false; // 新提示里出现了旧提示没有的关键 token → 不是复读
-  for (const t of A) if (!B.has(t)) return false;
-  // 否定签名（best-effort 启发式，不是语义理解）：对每个共有关键 token，
-  // 看它前面 10 个字符内有没有否定词；两句里任一 token 的否定签名不同 → 语义可能相反，不算复读。
-  // 这抓得住 "请运行 X" vs "请不要运行 X"、"Run X" vs "Never run X"，包括句中其他位置本来就有否定词的情况；
-  // 抓不住更远距离/更绕的否定——那类漏网宁可放行（多说一句好过压掉救命提示）。
-  // 否定语义：五轮对抗（单出现→多重集→从句签名→被否定从句签名）证明了一件事——
-  // 否定的作用域没法用字符级启发式可靠裁决，军备竞赛永远有下一个反例。
-  // 按设计原则"多说一句好过压掉纠正"收口为可证明保守的边界（codex 五验的建议）：
-  // 任一候选含否定词 → 不做 echo 抑制，除非两句规范化后逐字相同（纯粹复读）。
-  // 代价：被否定的警告可能偶尔复读一次——可接受。
-  // 别/没/莫 只在"词首"（前面不是汉字）才算否定——识别、淹没、约莫这类复合词里的不算
-  const HAS_NEG = /不|勿|(?<![一-鿿])[别没莫]|\b(?:not|don'?t|dont|no|never|avoid|stop)\b/i;
-  if (HAS_NEG.test(prev) || HAS_NEG.test(next)) {
-    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '');
-    return norm(prev) === norm(next);
-  }
-  return true;
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  return norm(prev) === norm(next);
 }
 
 /** 字符 bigram Jaccard 相似度（0~1）。中英文都好使，够快够糙。 */
