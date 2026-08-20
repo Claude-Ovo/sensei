@@ -45,7 +45,7 @@ We were especially proud when the Observer caught my *own* incorrect note ("git 
 Silence is a feature. Evidence in the prompt beats thinking budget for this job. Cheap models are best used as gates, not as replacements.
 
 ### What's next
-Voice hints (Gemini Live), a VS Code terminal integration, per-tool skill packs (git, docker, MCP), and turning the 60-second scripts into real short videos.
+Panel-side ask — the Firestore inbound pipe and security rules already accept signed-in 'ask' messages (rate-limited), so the panel needs only an input box to let a mentor query the Coach remotely. Then: voice hints (Gemini Live), a VS Code terminal integration, per-tool skill packs (git, docker, MCP), and turning the 60-second scripts into real short videos.
 
 ## Data sources
 The only data processed is the learner's own local terminal stream (stdout/stderr and typed commands), locally redacted before any storage. No third-party datasets.
