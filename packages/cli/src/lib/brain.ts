@@ -506,21 +506,17 @@ export function isEchoHint(prev: string, next: string): boolean {
   // 看它前面 10 个字符内有没有否定词；两句里任一 token 的否定签名不同 → 语义可能相反，不算复读。
   // 这抓得住 "请运行 X" vs "请不要运行 X"、"Run X" vs "Never run X"，包括句中其他位置本来就有否定词的情况；
   // 抓不住更远距离/更绕的否定——那类漏网宁可放行（多说一句好过压掉救命提示）。
-  // 否定语义（best-effort 启发式）：按标点切从句，只比较**被否定从句**的关键词集多重集。
-  // 直觉：否定作用在哪些词上才是语义关键——肯定部分怎么改写、怎么重新断句都算复读；
-  // 被否定的对象一变（"never … prod" 换成 "never … dev"），就是新提示，不许压。
-  // codex 四轮对抗的全部反例都在单测里站岗；再漏网的按"多说一句好过压掉纠正"处理。
-  const NEG_WORD = /^(?:not|don'?t|dont|no|never|avoid|stop)$/;
-  const negatedClauseSigs = (s: string): string => {
-    return s
-      .split(/[;,，。；、!?！？]/)
-      .map((c) => c.trim())
-      .filter((c) => c && /[不别勿莫没]|\b(?:not|don'?t|dont|never|avoid|stop)\b/i.test(c))
-      .map((c) => [...keyTokens(c)].filter((t) => !NEG_WORD.test(t)).sort().join('|'))
-      .sort()
-      .join(' ;; ');
-  };
-  if (negatedClauseSigs(prev) !== negatedClauseSigs(next)) return false;
+  // 否定语义：五轮对抗（单出现→多重集→从句签名→被否定从句签名）证明了一件事——
+  // 否定的作用域没法用字符级启发式可靠裁决，军备竞赛永远有下一个反例。
+  // 按设计原则"多说一句好过压掉纠正"收口为可证明保守的边界（codex 五验的建议）：
+  // 任一候选含否定词 → 不做 echo 抑制，除非两句规范化后逐字相同（纯粹复读）。
+  // 代价：被否定的警告可能偶尔复读一次——可接受。
+  // 别/没/莫 只在"词首"（前面不是汉字）才算否定——识别、淹没、约莫这类复合词里的不算
+  const HAS_NEG = /不|勿|(?<![一-鿿])[别没莫]|\b(?:not|don'?t|dont|no|never|avoid|stop)\b/i;
+  if (HAS_NEG.test(prev) || HAS_NEG.test(next)) {
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+    return norm(prev) === norm(next);
+  }
   return true;
 }
 

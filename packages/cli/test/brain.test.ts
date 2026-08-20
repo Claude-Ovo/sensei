@@ -60,8 +60,8 @@ test('isEchoHint negation signatures: codex counterexamples', async () => {
   // 两句都含"不要跳过检查"，但 npm install 的否定态翻转了 → 不是复读
   assert.ok(!isEchoHint('请运行 npm install，不要跳过检查。', '请不要运行 npm install，不要跳过检查。'));
   assert.ok(!isEchoHint('Run npm install; never skip tests.', 'Never run npm install; never skip tests.'));
-  // 两句否定态一致的换皮复读，仍要被抓
-  assert.ok(isEchoHint('请不要跳过 npm install 这一步。', '别跳过 npm install 这一步哦。'));
+  // 保守边界：含否定词的提示不再抑制（宁可复读警告，绝不吞纠正）
+  assert.ok(!isEchoHint('请不要跳过 npm install 这一步。', '别跳过 npm install 这一步哦。'));
 });
 
 test('redactor: basic auth is case-insensitive', async () => {
@@ -73,8 +73,8 @@ test('redactor: basic auth is case-insensitive', async () => {
 
 test('isEchoHint multi-occurrence negation signatures: codex round-3 counterexamples', async () => {
   const { isEchoHint } = await import('../src/lib/brain.js');
-  // 同义分句换序（各 token 否定多重集不变）→ 仍是复读
-  assert.ok(isEchoHint('Never run tests; run npm install.', 'Run npm install; never run tests.'));
+  // 保守边界：含否定词 → 不抑制（哪怕只是分句换序）
+  assert.ok(!isEchoHint('Never run tests; run npm install.', 'Run npm install; never run tests.'));
   // 第二处 npm install 极性反转 → 不是复读
   assert.ok(!isEchoHint(
     '先检查 npm install 日志，不要跳过测试，然后运行 npm install。',
@@ -88,4 +88,21 @@ test('isEchoHint clause signatures: codex round-4 counterexample (dev/prod polar
     'Run npm install in dev; never run npm install in prod.',
     'Never run npm install in dev; run npm install in prod.',
   ));
+});
+
+test('isEchoHint conservative boundary: codex round-5 triple + identical negated repeat', async () => {
+  const { isEchoHint } = await import('../src/lib/brain.js');
+  assert.ok(!isEchoHint(
+    'Never run npm install in dev and run npm test in prod.',
+    'Run npm install in dev and never run npm test in prod.',
+  ));
+  assert.ok(!isEchoHint(
+    '开发环境不要运行 npm install 但生产环境运行 npm test。',
+    '开发环境运行 npm install 但生产环境不要运行 npm test。',
+  ));
+  assert.ok(!isEchoHint('Do not delete cache and restart the server.', 'Delete cache and do not restart the server.'));
+  // 逐字相同（含否定）的纯复读仍要抑制
+  assert.ok(isEchoHint('请不要跳过 npm install 这一步。', '请不要跳过  npm install 这一步。'));
+  // 无否定的换皮复读照常抑制（回归）
+  assert.ok(isEchoHint('请在 package.json 中添加 "type": "module" 配置。', '请打开 package.json，加上 "type": "module" 配置。'));
 });
