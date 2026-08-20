@@ -310,7 +310,7 @@ export class Brain {
         case 'reply':
           if (m.text) {
             this.o.say(`panel reply${who}: ${m.text}`, 'info');
-            void this.handle('/reply', { text: m.text, questionId: m.questionId ?? null }).catch(() => undefined);
+            void this.handle('/reply', { text: m.text, questionId: m.questionId ?? null, fromPanel: true }).catch(() => undefined);
           }
           break;
         case 'feedback':
@@ -362,6 +362,7 @@ export class Brain {
           this.o.cloud?.userMessage(text, 'ask');
           this.transcript.push({ t: new Date().toISOString(), seq: this.transcript.lastSeq + 0.5, kind: 'user', text });
           if (!this.coach) throw new Error(this.llmError ?? 'coach unavailable');
+          try {
           const answer = await this.coach.answer({
             goal: this.o.goal,
             profile: this.profile,
@@ -380,6 +381,13 @@ export class Brain {
           this.lastHintSeq = this.transcript.lastSeq;
           this.transcript.push({ t: new Date().toISOString(), seq: this.transcript.lastSeq + 0.5, kind: 'agent', text: answer });
           return { answer };
+          } catch (e) {
+            // ask 已落日志：失败也要落一条 answer 占位，FIFO 配对不错位（codex 三验 #2）
+            const msg = String((e as Error).message).slice(0, 120);
+            this.o.log.append('agent', `(未能回答：${msg})`, { kind: 'answer', error: true });
+            this.qa.push({ q: text, a: `(未能回答：${msg})` });
+            throw e;
+          }
         };
         const p = this.askChain.then(run, run);
         this.askChain = p.then(
@@ -390,9 +398,16 @@ export class Brain {
       }
       case '/reply': {
         if (!text) throw new Error('empty reply');
-        // 带 questionId 的回复必须命中当前待答问题——过期/伪造 id 不允许抢答（codex 复核二 #13 补充）
-        const qid = typeof body.questionId === 'string' ? body.questionId : null;
-        if (qid && (!this.pendingQuestion || this.pendingQuestion.id !== qid)) {
+        // 回复的完整性（codex 三验 #4）：
+        // - 面板来源（fromPanel）：必须带非空 questionId 且命中当前待答问题——缺失/空串/过期/伪造一律拒绝
+        // - 终端 IPC（学习者本人在被包住的 shell 里）：无 id，保持原语义
+        const qid = typeof body.questionId === 'string' && body.questionId ? body.questionId : null;
+        if (body.fromPanel) {
+          if (!qid || !this.pendingQuestion || this.pendingQuestion.id !== qid) {
+            this.o.log.append('meta', 'reply.stale-question', { qid: qid ?? '(missing)' });
+            return { ok: false, reason: 'stale-question' };
+          }
+        } else if (qid && (!this.pendingQuestion || this.pendingQuestion.id !== qid)) {
           this.o.log.append('meta', 'reply.stale-question', { qid });
           return { ok: false, reason: 'stale-question' };
         }
@@ -477,7 +492,12 @@ export function quickSignal(slice: string): 'skip' | 'error' | 'ambiguous' {
 /** 两条提示是否算复读：文本相似度高，且关键 token（数字、代码标识符）没有变化 */
 export function isEchoHint(prev: string, next: string): boolean {
   if (bigramSimilarity(prev, next) <= 0.55) return false;
-  const keyTokens = (s: string) => new Set((s.match(/\d+|[A-Za-z_][\w./:\\-]{2,}/g) ?? []).map((t) => t.toLowerCase()));
+  const keyTokens = (s: string) =>
+    new Set(
+      (s.match(/\d+|[A-Za-z_][\w./:\\-]{2,}/g) ?? [])
+        .map((t) => t.toLowerCase().replace(/[./\\:-]+$/, '')) // 句尾标点别吞进 token："install." ≠ "install" 会误判集合不等
+        .filter((t) => t.length >= 2),
+    );
   const A = keyTokens(prev);
   const B = keyTokens(next);
   for (const t of B) if (!A.has(t)) return false; // 新提示里出现了旧提示没有的关键 token → 不是复读
@@ -487,12 +507,19 @@ export function isEchoHint(prev: string, next: string): boolean {
   // 这抓得住 "请运行 X" vs "请不要运行 X"、"Run X" vs "Never run X"，包括句中其他位置本来就有否定词的情况；
   // 抓不住更远距离/更绕的否定——那类漏网宁可放行（多说一句好过压掉救命提示）。
   const NEG = /[不别勿莫没]|\b(?:not|don'?t|never|no|avoid|stop)\s*$/i;
-  const negBefore = (s: string, token: string): boolean => {
-    const i = s.toLowerCase().indexOf(token);
-    if (i < 0) return false;
-    return NEG.test(s.slice(Math.max(0, i - 10), i));
+  // 每个 token 的**所有出现位置**都取否定签名，按排序后的多重集合比较：
+  // 只看第一次出现会在"同一 token 多次出现、极性不同"时误判（漏放和误杀两个方向都堵，codex 三验 #3）
+  const negFlags = (s: string, token: string): string => {
+    const ls = s.toLowerCase();
+    const flags: boolean[] = [];
+    let i = ls.indexOf(token);
+    while (i >= 0) {
+      flags.push(NEG.test(s.slice(Math.max(0, i - 10), i)));
+      i = ls.indexOf(token, i + token.length);
+    }
+    return flags.sort().join(',');
   };
-  for (const t of A) if (negBefore(prev, t) !== negBefore(next, t)) return false;
+  for (const t of A) if (negFlags(prev, t) !== negFlags(next, t)) return false;
   return true;
 }
 

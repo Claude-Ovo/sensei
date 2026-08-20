@@ -34,6 +34,10 @@ service cloud.firestore {
           && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 1000))
           && (!('value' in request.resource.data) || request.resource.data.value in ['helpful', 'too-basic', 'confusing', 'too-deep', 'just-tell-me', 'let-me-try', 'wrong'])
           && (!('questionId' in request.resource.data) || (request.resource.data.questionId is string && request.resource.data.questionId.size() <= 64))
+          && (request.resource.data.kind != 'reply'
+              || ('questionId' in request.resource.data
+                  && request.resource.data.questionId is string
+                  && request.resource.data.questionId.size() >= 1))
           && (
                (request.resource.data.kind in ['reply', 'feedback']
                  && (!('by' in request.resource.data) || request.resource.data.by == null

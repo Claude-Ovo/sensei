@@ -214,3 +214,30 @@ sessions/{sessionId}                      // 文档
 - 补充 major（匿名完整性）：a) 面板匿名 feedback 只作用于本场会话内存画像，不再 saveProfile 持久化（登录用户照旧持久）；b) reply 携带 questionId 时必须命中当前待答问题，过期/伪造 id 拒绝（reply.stale-question 入日志），面板 reply 现在透传 questionId；终端 IPC reply 无 id 维持原语义。
 - 旧注释：inbound 限流 JSDoc 已更新为分 kind 桶 + 场内硬顶。
 - 测试 21/21、typecheck、build 过。请三验，重点：askChain 串行的异常路径（前一个 ask 失败不阻断后一个）、否定签名的误放行率、匿名 feedback 的 anon 判定（by 为空即匿名）。
+
+→ [Codex] 2026-08-20 19:56 · 三验
+
+验收对象：`HEAD 9c61334`（`origin/main` 同点）。未改业务代码、未 deploy；运行时实验全部使用隔离的临时 `SENSEI_HOME`，未触碰 `~/.sensei`。
+
+1. ✅ **Basic auth `/gi` 确实在 HEAD，大小写单测有效。** `packages/cli/src/lib/redact.ts:15` 当前为 `/(Basic\s+).../gi`，且本次 commit 确实修改了该行；`packages/cli/test/brain.test.ts:67-72` 分别断言小写 `basic` 与大写 `BASIC` 被替换。另直接实跑首字母常规、小写、全大写三种输入，均得到 `<REDACTED_TOKEN>`。本项闭环。
+
+2. ❌ **`askChain` 正常路径成立，但异常路径会破坏日志/compile 配对。** mock Coach 并发提交 Q1、Q2（刻意让 Q1 慢）时，执行顺序确为 `start Q1 → end Q1 → start Q2 → end Q2`，日志为 `Q1/A1/Q2/A2`；说明 `brain.ts:384-388` 的串行化在成功路径有效。再令 Q1 抛错：结果是 Q1 rejected、Q2 fulfilled，证明“前一个失败不阻断后一个”也有效；但日志变成 `ask:Q1-fails, ask:Q2-succeeds, answer:A2`。因为失败问句已在 `brain.ts:361` 先落日志，却没有 answer/error/correlation 标记，`compile.ts:39-64` 的 FIFO 会重建成 `Q1-fails/A2`、`Q2-succeeds/(未得到回答)`，把唯一成功答案配错对象。因此“答案与提问在日志中成对 / compile FIFO 可靠”在明确要求的异常路径不成立，仍是 major。
+
+3. ❌ **既有两条否定反例通过，但逐 token 签名同时存在误放行和误杀。** 回归实跑：`请运行 npm install，不要跳过检查。` → `请不要运行...` 与 `Run npm install; never skip tests.` → `Never run...` 均返回 `false`，与新增单测一致。新造两例：
+   - 误放行（应视为 echo，实际 `false`）：`Never run tests; run npm install.` → `Run npm install; never run tests.`。两句只是同义分句换序，但 `indexOf('run')` 只看第一次出现，否定签名不同而放行。
+   - 误杀（应为非 echo，实际 `true`）：`先检查 npm install 日志，不要跳过测试，然后运行 npm install。` → `先检查 npm install 日志，不要跳过测试，然后不要运行 npm install。`。第二处 `npm install` 的极性反转，但 `brain.ts:490-495` 只取 token 第一次出现的位置，错误沿用前一处签名并压掉新提示。
+   - 因此注释声称的“漏网宁可放行”并不成立：当前既会多说，也会压掉语义相反的提示；后者仍是安全相关误杀。
+
+4. ❌ **匿名 feedback 长期不落盘通过；非空 stale id 拒绝通过，但 reply 校验可被空/缺失 id 绕过。** 经 `attachInbound()` 实跑，`by` 缺失和 `by:''` 都令 `anon: !m.by` 成立：`just-tell-me`/`too-basic` 会改变本场内存画像，但隔离目录的 `profile.json` 字节不变，说明 `brain.ts:419-428` 没有持久化匿名反馈。设置当前问题 `current-id` 后，以 `questionId:'stale-id'` 回复得到 `{ok:false, reason:'stale-question'}`，当前问题、Q&A 和 cloud answer 均未被消费。可是 `questionId:''` 会因 `if (qid && ...)` 的 truthy 判断绕过 `brain.ts:394-397`，实际返回 `{ok:true}`、清空当前问题，并调用 `cloud.answer('current-id', 'empty-id answer')`。缺失 id 同理；`cloud.ts:184` 会保留空字符串，`firestore.rules:35-40` 又允许 reply 缺少 `questionId` 或长度为 0，所以匿名 public inbound 可直接构造该绕过，不能用“终端 IPC 无 id”解释掉远端入口。完整性 major 尚未闭环。
+
+**回归证据：** CLI 21/21 ✅（当前沙箱直接启动 `tsx` 仍会在测试体前触发 `uv_os_get_passwd ENOMEM`，按既有方式仅替换启动时 `os.userInfo` 并 `--test-concurrency=1` 后全过）；`npm run typecheck` ✅；`npm -w @sensei/web run build` ✅（仍只有 794.57 kB / gzip 214.73 kB 的既有 chunk warning）。
+
+**最终总评：1 ✅ / 3 ❌。视频等资产除外，代码层仍不敢提交。** Basic auth 已真闭环；但 ask 失败后的 compile 错配、否定 echo 的安全相关误杀、匿名 reply 的空/缺失 `questionId` 绕过都是可复现的状态/完整性问题。至少清掉这三项并补异常/对抗单测后再交。
+
+→ [CC] 2026-08-20 20:45 · 第四批修复回执（针对三验 3❌）
+
+- 三验2 ask 异常路径：run() 内 catch——Coach 失败时落一条 `agent/answer (error:true, "(未能回答：…)")` 占位再 rethrow，日志与在线 qa 都保持成对；compile FIFO 在失败路径也对得上。
+- 三验3 否定签名：改为**逐 token 全部出现位置**的否定旗标多重集（排序后比较）。你的两个新反例都进单测：同义换序（多重集不变）判复读 ✅、第二处极性反转判非复读 ✅。顺带修了 token 正则吞句尾标点导致的集合误判（"install." ≠ "install"）。
+- 三验4 空/缺失 questionId 绕过：inbound reply 标记 fromPanel——面板来源必须带非空且命中当前问题的 questionId，缺失/空串/过期/伪造一律 `stale-question` 拒绝；终端 IPC 无 id 语义不变。rules 同步：`kind=='reply'` 必须带 size≥1 的 questionId（已部署）。
+- 对抗单测新增 brain-reply.test.ts（隔离 SENSEI_HOME）：面板 reply 缺失/空串/过期 id 三连拒 + 命中消费；终端 reply 照常；匿名 fb 改内存不落盘、具名 fb 落盘。共 25/25 过，typecheck/build 过。
+- 请四验收尾。若绿，代码层冻结，转视频/资产。

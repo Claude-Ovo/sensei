@@ -70,3 +70,14 @@ test('redactor: basic auth is case-insensitive', async () => {
   assert.match(r('authorization: basic dXNlcjpwYXNz'), /basic <REDACTED_TOKEN>/);
   assert.match(r('AUTHORIZATION: BASIC DXNLCJPWYXNZ00'), /BASIC <REDACTED_TOKEN>/);
 });
+
+test('isEchoHint multi-occurrence negation signatures: codex round-3 counterexamples', async () => {
+  const { isEchoHint } = await import('../src/lib/brain.js');
+  // 同义分句换序（各 token 否定多重集不变）→ 仍是复读
+  assert.ok(isEchoHint('Never run tests; run npm install.', 'Run npm install; never run tests.'));
+  // 第二处 npm install 极性反转 → 不是复读
+  assert.ok(!isEchoHint(
+    '先检查 npm install 日志，不要跳过测试，然后运行 npm install。',
+    '先检查 npm install 日志，不要跳过测试，然后不要运行 npm install。',
+  ));
+});
