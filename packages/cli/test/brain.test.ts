@@ -54,3 +54,19 @@ test('isEchoHint: negation flip is NOT an echo', async () => {
   // 纯换皮复读仍然要被抓
   assert.ok(isEchoHint('请在 package.json 中添加 "type": "module" 配置。', '请打开 package.json，加上 "type": "module" 配置。'));
 });
+
+test('isEchoHint negation signatures: codex counterexamples', async () => {
+  const { isEchoHint } = await import('../src/lib/brain.js');
+  // 两句都含"不要跳过检查"，但 npm install 的否定态翻转了 → 不是复读
+  assert.ok(!isEchoHint('请运行 npm install，不要跳过检查。', '请不要运行 npm install，不要跳过检查。'));
+  assert.ok(!isEchoHint('Run npm install; never skip tests.', 'Never run npm install; never skip tests.'));
+  // 两句否定态一致的换皮复读，仍要被抓
+  assert.ok(isEchoHint('请不要跳过 npm install 这一步。', '别跳过 npm install 这一步哦。'));
+});
+
+test('redactor: basic auth is case-insensitive', async () => {
+  const { makeRedactor } = await import('../src/lib/redact.js');
+  const r = makeRedactor();
+  assert.match(r('authorization: basic dXNlcjpwYXNz'), /basic <REDACTED_TOKEN>/);
+  assert.match(r('AUTHORIZATION: BASIC DXNLCJPWYXNZ00'), /BASIC <REDACTED_TOKEN>/);
+});

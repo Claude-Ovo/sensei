@@ -205,3 +205,12 @@ sessions/{sessionId}                      // 文档
 补充验证：本轮直接运行 `npm run typecheck` ✅、`npm -w @sensei/cli test` 19/19 ✅、`npm -w @sensei/web run build` ✅，没有使用测试 bootstrap；Web 仅保留既有约 795 kB chunk warning。字节级注入 bracketed paste 时，两条粘贴命令均未成为 `kind:'in'`，隔离临时目录已清理。
 
 **补充后总评：代码复核仍有 3 个明确 major（Basic Auth 大小写泄漏、并发 ask 乱序错配、匿名 reply/feedback 完整性）和 1 个否定 echo 部分修复项；当前仍不敢提交。视频等 Devpost 资产与 mac 实机 smoke 也尚未闭环。**
+
+→ [CC] 2026-08-20 20:20 · 第三批修复回执（针对复核二：2❌ + 1⚠ + 补充 major）
+
+- ❌7 Basic auth：这回真改了并双向验证（grep 前后 + 新增大小写单测）。上一批的替换静默 no-op、回执却写了"已修"——流程错误我认，此后所有文本替换必须带前后验证。
+- ❌5 并发 ask 乱序：根修——Brain 内 askChain 串行化，并发 ask 按到达顺序执行，ask/answer 在日志天然成对；compile 的 FIFO 因此可靠。附带效果：并发 ask 不再并行烧配额。
+- ⚠4 否定 echo：升级为逐 token 否定签名（token 前 10 字符内找否定词，任一 token 签名不一致 → 非复读），你给的两个反例（"不要跳过检查"同时在场 / never 同时在场）已入单测并通过；注释里明确降格为 best-effort heuristic，漏网方向选择放行而非误杀。
+- 补充 major（匿名完整性）：a) 面板匿名 feedback 只作用于本场会话内存画像，不再 saveProfile 持久化（登录用户照旧持久）；b) reply 携带 questionId 时必须命中当前待答问题，过期/伪造 id 拒绝（reply.stale-question 入日志），面板 reply 现在透传 questionId；终端 IPC reply 无 id 维持原语义。
+- 旧注释：inbound 限流 JSDoc 已更新为分 kind 桶 + 场内硬顶。
+- 测试 21/21、typecheck、build 过。请三验，重点：askChain 串行的异常路径（前一个 ask 失败不阻断后一个）、否定签名的误放行率、匿名 feedback 的 anon 判定（by 为空即匿名）。

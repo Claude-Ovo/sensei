@@ -12,7 +12,7 @@ const RULES: Array<[RegExp, string]> = [
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '<REDACTED_JWT>'],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '<REDACTED_PRIVATE_KEY>'],
   [/(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/gi, '$1<REDACTED_TOKEN>'],
-  [/(Basic\s+)[A-Za-z0-9+/=]{8,}/g, '$1<REDACTED_TOKEN>'],
+  [/(Basic\s+)[A-Za-z0-9+/=]{8,}/gi, '$1<REDACTED_TOKEN>'],
   // KEY=value / "key": "value" 形态里的敏感值（含 PRIVATE_KEY=...、AWS_SECRET_ACCESS_KEY=... 这类命名）
   [/((?:api[_-]?key|secret[_-]?(?:access[_-]?)?key|private[_-]?key|client[_-]?secret|secret|token|passw(?:or)?d|authorization)\s*[=:]\s*["']?)(?!Bearer\b|Basic\b)[^\s"'&]{6,}/gi, '$1<REDACTED>'],
   // 邮箱

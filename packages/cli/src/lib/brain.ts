@@ -60,6 +60,7 @@ export class Brain {
   private lastAutoAsked = '';
   private autoAskBusy = false;
   private pendingAutoAsk: string | null = null;
+  private askChain: Promise<unknown> = Promise.resolve();
   private inboundBuckets = new Map<string, number[]>();
   private inboundAskTotal = 0;
   private lastObservedSeq = 0;
@@ -273,7 +274,7 @@ export class Brain {
   /**
    * 面板写进 Firestore inbound 的消息 → 走同一套路由。
    * public 会话等于把 ask 开给了整个互联网（codex 验收 #5-13）：
-   * 令牌桶限流（ask 3/分钟、全部 12/分钟），超了丢弃并在终端提示一次；文本截长。
+   * 分 kind 令牌桶（ask 2/min·reply 5/min·feedback 6/min·note 4/min）+ ask 整场硬顶 10 次，超了丢弃并在终端提示一次；文本截长。
    */
   private inboundAllowed(kind: string): boolean {
     const now = Date.now();
@@ -309,13 +310,13 @@ export class Brain {
         case 'reply':
           if (m.text) {
             this.o.say(`panel reply${who}: ${m.text}`, 'info');
-            void this.handle('/reply', { text: m.text }).catch(() => undefined);
+            void this.handle('/reply', { text: m.text, questionId: m.questionId ?? null }).catch(() => undefined);
           }
           break;
         case 'feedback':
           if (m.value) {
             this.o.say(`panel feedback${who}: ${m.value}`, 'info');
-            void this.handle('/fb', { value: m.value }).catch(() => undefined);
+            void this.handle('/fb', { value: m.value, anon: !m.by }).catch(() => undefined);
           }
           break;
         case 'note':
@@ -354,31 +355,47 @@ export class Brain {
         };
       case '/ask': {
         if (!text) throw new Error('empty question');
-        this.o.log.append('user', text, { kind: 'ask' });
-        this.o.cloud?.userMessage(text, 'ask');
-        this.transcript.push({ t: new Date().toISOString(), seq: this.transcript.lastSeq + 0.5, kind: 'user', text });
-        if (!this.coach) throw new Error(this.llmError ?? 'coach unavailable');
-        const answer = await this.coach.answer({
-          goal: this.o.goal,
-          profile: this.profile,
-          notes: this.notes,
-          transcript: this.transcript.window(120).text,
-          history: this.history,
-          question: text,
-        });
-        this.history.push({ role: 'user', text }, { role: 'sensei', text: answer });
-        this.qa.push({ q: text, a: answer });
-        this.o.log.append('agent', answer, { kind: 'answer' });
-        this.o.cloud?.hint({ level: 'explain', text: answer, atSeq: this.transcript.lastSeq });
-        // 刚正面回答过：Observer 别紧接着复述一遍
-        this.hintsGiven.push(`(answered) ${answer.slice(0, 200)}`);
-        this.lastHintAt = Date.now();
-        this.lastHintSeq = this.transcript.lastSeq;
-        this.transcript.push({ t: new Date().toISOString(), seq: this.transcript.lastSeq + 0.5, kind: 'agent', text: answer });
-        return { answer };
+        // 串行化：并发 ask 按到达顺序一个个答，ask/answer 在日志里天然成对，
+        // 离线 compile 的 FIFO 配对因此可靠（codex 复核二 #5：响应乱序错配的根修）
+        const run = async (): Promise<{ answer: string }> => {
+          this.o.log.append('user', text, { kind: 'ask' });
+          this.o.cloud?.userMessage(text, 'ask');
+          this.transcript.push({ t: new Date().toISOString(), seq: this.transcript.lastSeq + 0.5, kind: 'user', text });
+          if (!this.coach) throw new Error(this.llmError ?? 'coach unavailable');
+          const answer = await this.coach.answer({
+            goal: this.o.goal,
+            profile: this.profile,
+            notes: this.notes,
+            transcript: this.transcript.window(120).text,
+            history: this.history,
+            question: text,
+          });
+          this.history.push({ role: 'user', text }, { role: 'sensei', text: answer });
+          this.qa.push({ q: text, a: answer });
+          this.o.log.append('agent', answer, { kind: 'answer' });
+          this.o.cloud?.hint({ level: 'explain', text: answer, atSeq: this.transcript.lastSeq });
+          // 刚正面回答过：Observer 别紧接着复述一遍
+          this.hintsGiven.push(`(answered) ${answer.slice(0, 200)}`);
+          this.lastHintAt = Date.now();
+          this.lastHintSeq = this.transcript.lastSeq;
+          this.transcript.push({ t: new Date().toISOString(), seq: this.transcript.lastSeq + 0.5, kind: 'agent', text: answer });
+          return { answer };
+        };
+        const p = this.askChain.then(run, run);
+        this.askChain = p.then(
+          () => undefined,
+          () => undefined,
+        );
+        return p;
       }
       case '/reply': {
         if (!text) throw new Error('empty reply');
+        // 带 questionId 的回复必须命中当前待答问题——过期/伪造 id 不允许抢答（codex 复核二 #13 补充）
+        const qid = typeof body.questionId === 'string' ? body.questionId : null;
+        if (qid && (!this.pendingQuestion || this.pendingQuestion.id !== qid)) {
+          this.o.log.append('meta', 'reply.stale-question', { qid });
+          return { ok: false, reason: 'stale-question' };
+        }
         this.o.log.append('user', text, { kind: 'reply' });
         this.o.cloud?.userMessage(text, 'reply');
         if (this.pendingQuestion) {
@@ -402,7 +419,9 @@ export class Brain {
       case '/fb': {
         const value = String(body.value ?? text);
         applyFeedback(this.profile, value);
-        saveProfile(this.profile);
+        // 匿名（面板未登录）反馈只作用于本场会话的内存画像，不持久化——
+        // 一条路人 just-tell-me 不该改写她的长期偏好（codex 复核二 #13 补充）
+        if (!body.anon) saveProfile(this.profile);
         this.o.log.append('user', value, { kind: 'feedback' });
         this.o.cloud?.userMessage(value, 'note');
         this.o.cloud?.setState({ profile: publicProfile(this.profile) });
@@ -463,18 +482,17 @@ export function isEchoHint(prev: string, next: string): boolean {
   const B = keyTokens(next);
   for (const t of B) if (!A.has(t)) return false; // 新提示里出现了旧提示没有的关键 token → 不是复读
   for (const t of A) if (!B.has(t)) return false;
-  // "请先运行 X" vs "请先不要运行 X"：字符差集里出现否定词 → 语义相反，不是复读（codex 复核 #4）
-  const only = (a: string, b: string) => {
-    const bs = new Set(b);
-    return [...a].filter((c) => !bs.has(c)).join('');
+  // 否定签名（best-effort 启发式，不是语义理解）：对每个共有关键 token，
+  // 看它前面 10 个字符内有没有否定词；两句里任一 token 的否定签名不同 → 语义可能相反，不算复读。
+  // 这抓得住 "请运行 X" vs "请不要运行 X"、"Run X" vs "Never run X"，包括句中其他位置本来就有否定词的情况；
+  // 抓不住更远距离/更绕的否定——那类漏网宁可放行（多说一句好过压掉救命提示）。
+  const NEG = /[不别勿莫没]|\b(?:not|don'?t|never|no|avoid|stop)\s*$/i;
+  const negBefore = (s: string, token: string): boolean => {
+    const i = s.toLowerCase().indexOf(token);
+    if (i < 0) return false;
+    return NEG.test(s.slice(Math.max(0, i - 10), i));
   };
-  const diff = only(prev, next) + only(next, prev);
-  if (/[不别勿莫没]/.test(diff)) return false;
-  const wordDiff = (a: string, b: string) => {
-    const bw = new Set((b.toLowerCase().match(/[a-z']+/g) ?? []));
-    return (a.toLowerCase().match(/[a-z']+/g) ?? []).filter((w) => !bw.has(w)).join(' ');
-  };
-  if (/\b(not|don't|dont|never|avoid|stop)\b/.test(wordDiff(prev, next) + ' ' + wordDiff(next, prev))) return false;
+  for (const t of A) if (negBefore(prev, t) !== negBefore(next, t)) return false;
   return true;
 }
 
