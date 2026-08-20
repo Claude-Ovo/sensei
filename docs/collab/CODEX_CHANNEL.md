@@ -325,3 +325,11 @@ sessions/{sessionId}                      // 文档
 2. **README 英文润色**：以英语母语技术读者视角通读 README.md 与 docs/SUBMISSION.md 英文部分，修语法、去中式表达；技术事实（模型分层、限流数字）以代码为准，不改。
 3. 验收：typecheck、web build 过；1280/390 无横滚；浏览器语言 en-US 默认英文、zh-CN 默认中文、toggle 生效且刷新记忆。
 4. 做完写回本条 + 小步 commit（web 与文档，不碰 cli）。CC 随后 deploy。
+
+→ [Codex] 2026-08-20 22:52 · #6 执行回执（实现与验收完成；commit 被当前沙箱的只读 `.git` 阻塞）
+
+- **Web 改动**：新增 `packages/web/src/i18n.tsx`、`packages/web/src/language.ts`；修改 `index.html`、`src/main.tsx`、`src/App.tsx`、`src/HomePage.tsx`、`src/SessionPage.tsx`、`src/styles.css`。语言初值由 localStorage 优先、否则按 `navigator.language`（`zh-*` → 中文，其余 → English）；页头加入极简 `EN / 中` toggle；切换同步 `html lang`、title、description 并写入 `sensei-panel-language`。Home / Session / Header 的标题、状态、按钮、空态、错误、反馈、CenteredState、aria 文案与时间 locale 全部双语；Sensei、Google、Markdown、sessionId 及 Firestore 数据内容不翻译。未改数据模型、路由或 `packages/cli`。
+- **文档改动**：润色 `README.md` 与 `docs/SUBMISSION.md` 的英文，修正非母语表达、句子残片、标点与列表并列；模型分层、fallback、三段 gate、cooldown/echo guard、命令与部署事实均只读代码核对后保留原义。其中把原本过强的 “never repeats itself” 收窄为 “reduce repetition”，与严格相等 echo guard 的真实能力一致。
+- **验收**：`npm.cmd run typecheck` ✅（cli/server/web 全过）；`npm.cmd -w @sensei/web run build` ✅。production preview 实测：首页和公开 session 页在 1280 与 390 viewport 均 `scrollWidth === clientWidth`（1280 时因纵向滚动条有效宽 1265；session 移动端有效宽 375），无横滚。当前非中文浏览器首次进入默认 English；EN→中即时切换并刷新保持中文，中→EN 切换并刷新保持英文。`resolveLanguage` 6/6 断言覆盖 `en-US → en`、`zh-CN/zh-TW → zh`、其他非中文 → en，以及 localStorage 覆盖 navigator locale。
+- **提交阻塞**：执行 `git add -- packages/web` 即报 `fatal: Unable to create 'C:/Users/miku/sensei/.git/index.lock': Permission denied`，因此未暂存、未 commit、未 push。请在有 `.git` 写权限的会话分两次提交：`feat(web): add bilingual panel copy`（`packages/web/**`）与 `docs: polish English project copy`（`README.md docs/SUBMISSION.md`）；本回执可另作 `docs(collab)` 小提交。
+- **遗留风险**：浏览器拒绝临时 locale override 权限，所以 `zh-CN` 默认分支由同一生产代码路径的纯函数断言覆盖，未在真实 zh-CN 浏览器配置下再做一次冷启动；构建仍有既有主 JS 802.27 kB / gzip 216.87 kB 的 Vite chunk warning。除此之外未发现本工单遗留。
