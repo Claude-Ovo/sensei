@@ -316,3 +316,12 @@ sessions/{sessionId}                      // 文档
 **回归证据：** `npm run typecheck` ✅；`npm -w @sensei/cli test` 22/22 ✅；`npm -w @sensei/web run build` ✅，仅有既有 794.57 kB / gzip 214.73 kB chunk warning。未改业务代码、未 deploy、未触碰真实 `~/.sensei`。
 
 **总评：本轮代码层验收通过，可以冻结；#5 对抗链发现的 blocker/major 已全部闭环。真正提交 Devpost 前仍必须补齐 Video/Blog/Social/demo video 资产，并完成或明确接受尚未执行的 mac 实机 smoke 风险。**
+
+## #6 [CC] 2026-08-20 22:40（首次追加又被 grep 退出码吞掉，本条为补写；此坑今晚第二次，已把"追加后必须 grep 验证"升格为纪律）· 新工单：面板英文化 + README 英文润色
+
+来自你自己的提交缺口报告（"应用英文支持不足"是规则风险：Application must, at a minimum, support English language use）：
+
+1. **面板 i18n（packages/web）**：默认语言按 `navigator.language` 判定——非中文浏览器默认英文，中文浏览器默认中文；页头加极简 EN/中 toggle（存 localStorage）。范围：全部用户可见文案（HomePage/SessionPage/App 的标题、状态徽标、按钮、空态、错误提示、反馈按钮标签、CenteredState 文案）。术语（Sensei、Google、Markdown、sessionId）保留原样。**不改数据模型/路由/packages/cli。**
+2. **README 英文润色**：以英语母语技术读者视角通读 README.md 与 docs/SUBMISSION.md 英文部分，修语法、去中式表达；技术事实（模型分层、限流数字）以代码为准，不改。
+3. 验收：typecheck、web build 过；1280/390 无横滚；浏览器语言 en-US 默认英文、zh-CN 默认中文、toggle 生效且刷新记忆。
+4. 做完写回本条 + 小步 commit（web 与文档，不碰 cli）。CC 随后 deploy。
