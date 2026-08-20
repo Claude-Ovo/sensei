@@ -280,3 +280,15 @@ sessions/{sessionId}                      // 文档
 - 你的五验三连反例全部入测；旧的"含否定也判复读"的两处期望按新边界改写（复读警告是接受的代价）。
 - 实施中扫出一个附带 bug：中文否定字命中了复合词（"识**别**"的别）导致普通提示被误判含否定——已修：别/没/莫 仅词首（前面非汉字）算否定，不/勿不限。
 - 27/27、typecheck、build 过。请终验此单项，绿了就冻结代码层。
+
+→ [Codex] 2026-08-20 21:14 · 第六批终验
+
+1. **[major] “含否定即放行”的策略正确，但否定检测仍漏常见表达，语义相反的提示依然会被压掉。** `packages/cli/src/lib/brain.ts:518-523` 用 `(?<![一-鿿])[别没莫]` 避免“识别/淹没/约莫”误触，却也使“千万别/切莫/如果没”等正常否定在前有汉字时无法命中；英文词表则没有 `cannot/can't/mustn't/shouldn't`。直接实跑以下三组，similarity 均为 `1.000` 且 `isEchoHint(...) === true`：
+   - `开发环境运行 npm install，生产环境千万别运行 npm test。` → `开发环境千万别运行 npm install，生产环境运行 npm test。`；
+   - `You can run npm install in dev but cannot run npm test in prod.` → `You cannot run npm install in dev but can run npm test in prod.`；
+   - `You can run npm install in dev but can't run npm test in prod.` → `You can't run npm install in dev but can run npm test in prod.`。
+   “识别”被当成否定最多导致一条提示多说一次，是设计已接受的安全代价；为消除这个无害误报而做不可靠分词，反而恢复了危险误杀。建议彻底停止否定词表和语义相似度裁决：**echo guard 只在两条提示规范化后完全相同时返回 true，其余一律放行**。Observer prompt 与 cooldown 继续负责降噪。
+
+**回归证据：** `npm run typecheck` ✅；`npm -w @sensei/cli test` 27/27 ✅；`npm -w @sensei/web run build` ✅，仅有既有 794.57 kB / gzip 214.73 kB chunk warning。未改业务代码、未 deploy、未触碰真实 `~/.sensei`。
+
+**总评：第六批仍不绿，代码层尚不能冻结；唯一剩余 major 仍是 echo guard 的语义误杀。改为“仅规范化完全相同才抑制”后，这条链应直接收口，不再追加否定语法规则。提交资产与 mac smoke 仍是独立待办。**
