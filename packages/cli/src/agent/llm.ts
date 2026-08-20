@@ -48,9 +48,10 @@ const PENALTY_MS = 10 * 60 * 1000;
 export function orderModels(models: string[]): string[] {
   const now = Date.now();
   const ok = models.filter((m) => (penaltyUntil.get(m) ?? 0) <= now);
-  const resting = models.filter((m) => (penaltyUntil.get(m) ?? 0) > now).sort((a, b) => (penaltyUntil.get(a) ?? 0) - (penaltyUntil.get(b) ?? 0));
-  // 能用的排前面；全在歇也把整条链给出去（按最早恢复排序），一个都不放弃
-  return [...ok, ...resting];
+  // 有可用的：真正跳过休眠模型（这才叫断路器——codex 验收 #5-9）
+  if (ok.length) return ok;
+  // 全在歇：按最早恢复排序，把整条链给出去，一个都不放弃
+  return [...models].sort((a, b) => (penaltyUntil.get(a) ?? 0) - (penaltyUntil.get(b) ?? 0));
 }
 export function penalize(model: string, ms = PENALTY_MS): void {
   penaltyUntil.set(model, Math.max(penaltyUntil.get(model) ?? 0, Date.now() + ms));
@@ -86,6 +87,12 @@ const RETRYABLE = /high demand|overloaded|resource.?exhausted|429|503|UNAVAILABL
  * 一次性运行：不落会话状态，上下文全靠调用方拼进 message。
  * 每次尝试都有超时；超时/限流 → 记入断路器，换下一个模型。
  */
+/** 不认 thinkingConfig 的模型（400 invalid argument 学来的），按模型隔离而不是永久改共享配置 */
+const noThinkingModels = new Set<string>();
+export function isInvalidArgument(msg: string): boolean {
+  return /invalid[ _-]?argument/i.test(msg);
+}
+
 export async function runOnce(
   agent: LlmAgent,
   message: string,
@@ -97,9 +104,20 @@ export async function runOnce(
   const timeoutMs = opts.timeoutMs ?? 25_000;
   let attempts = 0;
   let lastErr: string | null = null;
+  // 保存原始配置：任何按模型的 thinkingConfig 摘除都只影响本次调用，结束后还原（codex 验收 #5-10）
+  const originalConfig = agent.generateContentConfig;
+  const stripThinking = () => {
+    if (originalConfig && (originalConfig as { thinkingConfig?: unknown }).thinkingConfig) {
+      const { thinkingConfig: _drop, ...rest } = originalConfig as Record<string, unknown>;
+      agent.generateContentConfig = rest as typeof agent.generateContentConfig;
+    }
+  };
+  try {
   for (let mi = 0; mi < models.length; mi++) {
     const model = models[mi];
     if (opts.cfg && model !== currentModelName(agent)) agent.model = makeModel(opts.cfg, model);
+    agent.generateContentConfig = originalConfig;
+    if (noThinkingModels.has(model)) stripThinking();
     for (let retry = 0; retry < 2; retry++) {
       attempts++;
       const runner = new InMemoryRunner({ agent, appName: 'sensei' });
@@ -140,9 +158,11 @@ export async function runOnce(
       }
       if (text) return { text, events, attempts, model, ms: Date.now() - t0 };
       lastErr = errorMessage ?? (ac.signal.aborted ? `timeout after ${timeoutMs}ms` : 'empty response');
-      // 部分模型不认 thinkingConfig（返回 400 invalid argument）：摘掉它在同一个模型上再试一次
-      if (/invalid argument/i.test(lastErr) && (agent.generateContentConfig as { thinkingConfig?: unknown } | undefined)?.thinkingConfig) {
-        delete (agent.generateContentConfig as { thinkingConfig?: unknown }).thinkingConfig;
+      // 部分模型不认 thinkingConfig（400 INVALID_ARGUMENT / invalid-argument / invalid argument）：
+      // 记住这个模型，摘掉配置在同一个模型上再试一次
+      if (isInvalidArgument(lastErr) && (agent.generateContentConfig as { thinkingConfig?: unknown } | undefined)?.thinkingConfig) {
+        noThinkingModels.add(model);
+        stripThinking();
         continue;
       }
       if (!RETRYABLE.test(lastErr)) break; // 非瞬时错误：换模型
@@ -162,6 +182,9 @@ export async function runOnce(
     }
   }
   throw new LlmError(`LLM gave no usable response after ${attempts} attempts (${Date.now() - t0}ms): ${lastErr}`);
+  } finally {
+    agent.generateContentConfig = originalConfig;
+  }
 }
 
 function currentModelName(agent: LlmAgent): string | undefined {

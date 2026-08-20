@@ -12,3 +12,7 @@ coverage/
 *.local
 sensei-sessions/
 docs/collab/*.log
+# credentials — never in the repo
+service-account*.json
+*credentials*.json
+*.pem

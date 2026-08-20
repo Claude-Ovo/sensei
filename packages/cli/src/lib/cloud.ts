@@ -94,12 +94,16 @@ export class CloudStore {
   }
 
   private lastMetaTouch = 0;
+  private lastSeqSeen = 0;
+  private compiled = false;
 
   chunk(c: Chunk): void {
     // 非整数 seq（ask/agent 插入的 x.5）不进 chunks 集合，它们已在 hints/messages 里
     if (!Number.isInteger(c.seq)) return;
+    this.lastSeqSeen = Math.max(this.lastSeqSeen, c.seq);
     const id = String(c.seq).padStart(6, '0');
-    // 会话文档的 lastSeq/updatedAt 最多每 3 秒刷一次，省一半写入配额（Spark 免费额度 2 万写/天）
+    // 会话文档的 lastSeq/updatedAt 最多每 3 秒刷一次，省一半写入配额（Spark 免费额度 2 万写/天）；
+    // 节流漏掉的尾巴由 end() 的最终一笔补上
     const touchMeta = Date.now() - this.lastMetaTouch > 3000;
     if (touchMeta) this.lastMetaTouch = Date.now();
     this.queue(async () => {
@@ -121,12 +125,11 @@ export class CloudStore {
     );
   }
 
-  question(q: Question): Promise<string | undefined> {
-    return this.ref
-      .collection('questions')
-      .add({ ...q, answer: null, ts: FieldValue.serverTimestamp() })
-      .then((d) => d.id)
-      .catch(() => undefined);
+  question(q: Question): string {
+    // id 本地生成（不联网），写入走队列——云端卡住不能把 Observer 卡在 observing=true
+    const doc = this.ref.collection('questions').doc();
+    this.queue(() => doc.set({ ...q, answer: null, ts: FieldValue.serverTimestamp() }), 'question');
+    return doc.id;
   }
 
   answer(questionId: string, answer: string): void {
@@ -144,12 +147,20 @@ export class CloudStore {
   }
 
   setState(patch: Record<string, unknown>): void {
+    if (patch.state === 'compiled') this.compiled = true;
     this.queue(() => this.ref.set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true }), 'state');
   }
 
   end(exitCode: number): void {
+    // 已编译的会话不许被 exit 打回 'ended'；顺便把节流欠下的 lastSeq/updatedAt 尾账结清
+    const state = this.compiled ? 'compiled' : 'ended';
+    const lastSeq = this.lastSeqSeen;
     this.queue(
-      () => this.ref.set({ state: 'ended', exitCode, endedAt: FieldValue.serverTimestamp() }, { merge: true }),
+      () =>
+        this.ref.set(
+          { state, exitCode, lastSeq, endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        ),
       'session.end',
     );
   }

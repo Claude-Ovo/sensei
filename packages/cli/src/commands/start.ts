@@ -87,14 +87,17 @@ export async function start(opts: StartOptions) {
   const brain = new Brain({
     cfg,
     sessionId,
-    goal: opts.goal ?? null,
+    goal: opts.goal ? redact(opts.goal) : null,
     log,
     say,
     cloud,
+    redact,
     quietObserver: !!opts.noAgent,
   });
 
   const { info, server } = await startIpc(sessionId, (route, body) => brain.handle(route, body));
+  // IPC token 是运行中才生成的密钥：立刻补进脱敏器，防止 echo $env:SENSEI_TOKEN 之类把它带进日志/云端
+  redact.addSecret(info.token);
 
   const term = pty.spawn(shell, shellArgs, {
     name: 'xterm-256color',
@@ -110,7 +113,7 @@ export async function start(opts: StartOptions) {
     } as Record<string, string>,
   });
 
-  const startMeta = { shell, cwd: redact(process.cwd()), platform: process.platform, goal: opts.goal ?? null };
+  const startMeta = { shell, cwd: redact(process.cwd()), platform: process.platform, goal: opts.goal ? redact(opts.goal) : null };
   log.append('meta', 'session.start', { ...startMeta, public: !!opts.public });
   cloud?.start({
     ...startMeta,
@@ -130,26 +133,50 @@ export async function start(opts: StartOptions) {
     outChunker.push(d);
   });
 
-  // 输入流：透传给 pty，同时按行记录用户敲的命令
+  // 输入流：透传给 pty，同时按行"尽力"记录用户敲的命令。
+  // 方向键/Tab 补全/历史调用会让 lineBuf 失真（我们看不到 shell 补出来的字符）——
+  // 这种行标记为 dirty，宁可不记也不记错的；真实执行的命令终归会出现在输出回显里，Observer 不瞎。
   termRef = term;
   const stdin = process.stdin;
   if (stdin.isTTY) stdin.setRawMode(true);
   stdin.resume();
   stdin.setEncoding('utf8');
+  let lineDirty = false;
+  let esc = ''; // 正在吞的 ESC 序列
   stdin.on('data', (key: string) => {
     term.write(key);
     for (const ch of key) {
+      if (esc) {
+        esc += ch;
+        // CSI: ESC [ ... 终止于 @-~；两字符序列: ESC + 单字符
+        const done = esc.length === 2 ? esc[1] !== '[' && esc[1] !== ']' && esc[1] !== 'O' : /[@-~]/.test(ch);
+        if (done) {
+          // 任何 CSI（方向键/历史/光标移动/粘贴标记）都会让我们的镜像失真——一律标脏
+          if (esc.startsWith('\x1b[') || esc.startsWith('\x1bO')) lineDirty = true;
+          esc = '';
+        }
+        continue;
+      }
+      if (ch === '\x1b') {
+        esc = ch;
+        continue;
+      }
       if (ch === '\r' || ch === '\n') {
         const cmd = lineBuf.trim();
         lineBuf = '';
-        if (cmd) brain.ingest(log.append('in', redact(cmd)));
+        if (cmd && !lineDirty) brain.ingest(log.append('in', redact(cmd)));
+        else if (lineDirty) log.append('meta', 'input.dirty-line-skipped');
+        lineDirty = false;
         // 命令已回显，攒着的提示现在打出来
         setTimeout(flushSays, 60);
+      } else if (ch === '\t') {
+        lineDirty = true; // shell 补全的字符我们看不见
       } else if (ch === '\x7f' || ch === '\b') {
         lineBuf = lineBuf.slice(0, -1);
         if (!lineBuf.length) setTimeout(flushSays, 60);
       } else if (ch === '\x03') {
         lineBuf = '';
+        lineDirty = false;
         brain.ingest(log.append('meta', 'ctrl-c'));
         setTimeout(flushSays, 60);
       } else if (ch >= ' ') {

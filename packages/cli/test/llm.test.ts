@@ -9,14 +9,22 @@ test('extractJson tolerates fences, prefixes and trailing prose', () => {
   assert.equal(extractJson(''), null);
 });
 
-test('orderModels puts resting models last, sorted by soonest recovery, dropping none', () => {
+test('orderModels skips resting models; walks all (soonest first) only when everything rests', () => {
   const models = ['m-a', 'm-b', 'm-c'];
   assert.deepEqual(orderModels(models), models);
   penalize('m-a', 60_000);
-  assert.deepEqual(orderModels(models), ['m-b', 'm-c', 'm-a']);
+  assert.deepEqual(orderModels(models), ['m-b', 'm-c']); // 真跳过，不再殿后追打
   penalize('m-b', 120_000);
   penalize('m-c', 30_000);
-  assert.deepEqual(orderModels(models), ['m-c', 'm-a', 'm-b']);
+  assert.deepEqual(orderModels(models), ['m-c', 'm-a', 'm-b']); // 全歇：按最早恢复走整条链
+});
+
+test('isInvalidArgument matches all Google spellings', async () => {
+  const { isInvalidArgument } = await import('../src/agent/llm.js');
+  assert.ok(isInvalidArgument('Request contains an invalid argument.'));
+  assert.ok(isInvalidArgument('INVALID_ARGUMENT'));
+  assert.ok(isInvalidArgument('code: invalid-argument'));
+  assert.ok(!isInvalidArgument('permission denied'));
 });
 
 test('msUntilPacificMidnight is within a day and positive', () => {

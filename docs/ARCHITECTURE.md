@@ -9,11 +9,11 @@
 │ ├─ node-pty 包住 shell          │ chunks │  sessions/{id}                        │
 │ ├─ 清洗 ANSI + 本地脱敏         │ ─────▶ │   ├─ chunks/{seq}   终端流（脱敏后）    │
 │ ├─ Observer agent（ADK，后台）  │        │   ├─ notes/{id}     agent 记的笔记      │
-│ │   gemini-3.7-flash            │ hints  │   ├─ questions/{id} 澄清问题 + 回答     │
-│ ├─ Coach agent（ADK，问答）     │ ◀───── │   ├─ hints/{id}     提示（等级/正文）    │
-│ ├─ Compiler agent（ADK，编译）  │        │   ├─ feedback/{id}  helpful/too-basic… │
-│ └─ Redactor（gemma，二次脱敏）  │        │   └─ tutorial       编译出的教程        │
-└────────────────────────────────┘        │  learners/{uid}     学习者画像          │
+│ │   gemini-3.5-flash-lite       │ hints  │   ├─ questions/{id} 澄清问题 + 回答     │
+│ ├─ Coach agent（3.7-flash）     │ ◀───── │   ├─ hints/{id}     提示（等级/正文）    │
+│ ├─ Compiler agent（3.7-flash）  │        │   ├─ messages/{id}  学习者→sensei       │
+│ └─ Triage 分诊（gemma-4）       │        │   ├─ inbound/{id}   面板→CLI            │
+└────────────────────────────────┘        │   └─ tutorial       编译出的教程(字段)  │
         ▲  inline hint / question          └──────────────────────────────────────┘
         │  sensei reply / ask / note / done                 ▲ realtime listeners
         │                                                   │
@@ -25,10 +25,10 @@
 ```
 
 ## 数据流
-1. `sensei start` 用 node-pty 起用户的 shell，镜像 I/O 到真实终端；输出按"400ms 安静或 4KB"切 chunk，先本地脱敏（key/token/邮箱/公网 IP/家目录），写本地 JSONL，同时写 Firestore `sessions/{id}/chunks`。
-2. Observer 在 CLI 进程里作为后台循环跑：防抖触发（新输出后 ~2s 无动静，或识别到 prompt 回显）→ `runner.runEphemeral`，输入 = 最近 N 行 + 当前笔记 + 学习者画像 + 目标；输出结构化 JSON：`{state, stuck?: {kind, evidence}, hint?: {level, text}, question?: string, note?: string, milestone?: string}`。
+1. `sensei start` 用 node-pty 起用户的 shell，镜像 I/O 到真实终端；输出按"400ms 安静或 4KB"切 chunk，先本地正则脱敏（key/token/JWT/私钥/邮箱/公网 IP/家目录/运行时 IPC token），写本地 JSONL，同时写 Firestore `sessions/{id}/chunks`；ask/reply/note/goal 等用户文本同样先过脱敏再落盘/上云。
+2. Observer 在 CLI 进程里作为后台循环跑：三级门（本地正则 → Gemma 分诊 → Observer）防抖触发（新输出后 ~2.5s 无动静）→ `InMemoryRunner.runAsync` 一次性运行（上下文由我们拼，不用 ADK 会话记忆）；输出结构化 JSON：`{status, confidence, what_happened, stuck_reason, hint?: {level, text}, question, note, milestone, profile_update}`。
 3. hint / question 写 Firestore，并在终端里内联打印一行（灰色前缀 `[sensei]`）；用户 `sensei reply "..."` 或在面板里回答。
-4. 反馈（helpful / too-basic / wrong / show-me-why）写 `feedback`，Coach 下一轮读取并调整画像（verbosity / level / style / known concepts）。
+4. 反馈（helpful / too-basic / confusing / too-deep / just-tell-me / let-me-try）经 IPC 或面板 `inbound` 进来，直接调整本地学习者画像（~/.sensei/profile.json，跨会话），并同步到会话文档的 `profile` 字段。
 5. `sensei done`：Compiler agent 读整段会话（chunks + notes + questions + milestones），产出 `tutorial.md`（目标 / 前置 / 步骤 / 踩过的坑与修法 / 复盘）+ 60 秒口播稿，写 Firestore，面板可预览导出。
 
 ## 为什么符合 Collaborative Partner
@@ -38,9 +38,9 @@
 - Beyond chat loop：Observer 是后台异步的，用户不主动问也会被点拨。
 
 ## 三件套对应
-- Gemini：`gemini-3.7-flash`（Observer/Coach/Compiler），`gemma-4-26b-a4b-it`（二次脱敏/分类，加分）
-- 框架：`@google/adk`（LlmAgent + FunctionTool + Runner）
-- Google Cloud：Cloud Firestore（全部持久化 + 实时）、Firebase Hosting（面板）；可选 Cloud Run（README 里给部署脚本）
+- Gemini：`gemini-3.5-flash-lite`（Observer 高频观察，thinking 关）、`gemini-3.7-flash`（Coach/Compiler），带超时+回退+配额断路器；`gemma-4-26b-a4b-it`（分诊门，加分模型）
+- 框架：`@google/adk`（`LlmAgent` + zod `outputSchema` + `InMemoryRunner`）
+- Google Cloud：Cloud Firestore（全部持久化 + 实时）、Firebase Hosting（面板）；Cloud Run 形态只是 README 提到的可能方向（packages/server 为空壳占位）
 
 ## 视频里要出现的 Google Cloud 画面
 - Firebase 控制台 Firestore 页：终端一敲命令，chunks/notes 实时冒出来

@@ -21,6 +21,8 @@ export interface BrainOptions {
   /** 往真实终端打一行（stderr），由 start 提供，负责处理光标/换行 */
   say: (text: string, level?: string) => void;
   cloud?: CloudStore;
+  /** 本地脱敏器：所有用户可见文本出机前过它（ask/reply/note/goal/面板 inbound） */
+  redact?: (s: string) => string;
   quietObserver?: boolean;
   /** 安静多久触发一次观察（ms） */
   debounceMs?: number;
@@ -54,8 +56,12 @@ export class Brain {
   private lastHintAt = 0;
   private lastHintSeq = 0;
   private lastInText = '';
+  private lastInAt = 0;
   private lastAutoAsked = '';
   private autoAskBusy = false;
+  private pendingAutoAsk: string | null = null;
+  private inboundTimes: number[] = [];
+  private inboundAskTimes: number[] = [];
   private lastObservedSeq = 0;
   private startedAt = Date.now();
   private llmError: string | null = null;
@@ -85,7 +91,10 @@ export class Brain {
   ingest(c: Chunk): void {
     this.transcript.push(c);
     this.o.cloud?.chunk(c);
-    if (c.kind === 'in') this.lastInText = c.text;
+    if (c.kind === 'in') {
+      this.lastInText = c.text;
+      this.lastInAt = Date.now();
+    }
     if (c.kind === 'out') this.maybeAutoAsk(c.text);
     if (c.kind === 'out' || c.kind === 'in') this.schedule();
   }
@@ -93,17 +102,29 @@ export class Brain {
   /**
    * 她教会我们的功能：学习者会直接在终端里打自然语言（"这个错到底怎么回事"）。
    * shell 报"无法识别命令"时，如果上一条输入长得像人话，就把它当 sensei ask 接住，
-   * 并顺便教一次正确用法。每条输入只接一次。
+   * 并顺便教一次正确用法。
+   * 约束（codex 验收 #5-5）：输入和它的报错必须挨着（≤8s），防止旧问题被后来的无关报错迟到误触发；
+   * 忙时排队一个，不静默丢。
    */
   private maybeAutoAsk(out: string): void {
-    if (!this.coach || this.autoAskBusy) return;
+    if (!this.coach) return;
     const q = this.lastInText;
     if (!q || q === this.lastAutoAsked) return;
     const cmdNotFound = /CommandNotFoundException|is not recognized as (the name of )?a cmdlet|command not found|无法将.{0,60}识别为/i.test(out);
     if (!cmdNotFound) return;
+    // 报错必须紧跟着这条输入；太久以前的输入不认账
+    if (Date.now() - this.lastInAt > 8_000) return;
     const natural = /[一-鿿]/.test(q) || /[?？]\s*$/.test(q) || /^(what|why|how|where|help|explain|please)\b/i.test(q);
     if (!natural || /^sensei\b/i.test(q)) return;
     this.lastAutoAsked = q;
+    if (this.autoAskBusy) {
+      this.pendingAutoAsk = q; // 排队一个，最新的赢
+      return;
+    }
+    this.fireAutoAsk(q);
+  }
+
+  private fireAutoAsk(q: string): void {
     this.autoAskBusy = true;
     this.o.say(`这句我当问题接了（下次可以直接：sensei ask "${q.slice(0, 40)}"）`, 'info');
     void this.handle('/ask', { text: q })
@@ -111,6 +132,9 @@ export class Brain {
       .catch((e) => this.o.say(`没答上来：${String((e as Error).message).slice(0, 80)}`, 'error'))
       .finally(() => {
         this.autoAskBusy = false;
+        const next = this.pendingAutoAsk;
+        this.pendingAutoAsk = null;
+        if (next && next !== q) this.fireAutoAsk(next);
       });
   }
 
@@ -222,8 +246,9 @@ export class Brain {
       // 冷却：刚说过话（40s 内）且这段里没有新的报错/用户消息 → 这次不开口，只记笔记
       const sinceLastHint = Date.now() - this.lastHintAt;
       const fresh = quickSignal(this.transcript.since(this.lastHintSeq)) === 'error';
-      // 复读机守卫：跟最近两条提示意思雷同（字符 bigram 相似度高）就闭嘴——同一个坑反复触发"新错误"时冷却拦不住它
-      const echo = this.hintsGiven.slice(-2).some((h) => bigramSimilarity(h, obs.hint!.text) > 0.55);
+      // 复读机守卫：跟最近两条提示意思雷同就闭嘴——同一个坑反复触发"新错误"时冷却拦不住它。
+      // 但关键 token（数字/代码标识符）不同的两条不算复读："改成 3001" vs "改成 3002" 是两个提示（codex 验收 #5-11）
+      const echo = this.hintsGiven.slice(-2).some((h) => isEchoHint(h, obs.hint!.text));
       if (echo) {
         this.o.log.append('meta', 'hint.suppressed', { text: obs.hint.text.slice(0, 120), reason: 'echo' });
       } else if (sinceLastHint < 40_000 && !fresh) {
@@ -238,17 +263,41 @@ export class Brain {
       }
     }
     if (obs.question && !this.pendingQuestion) {
-      const id = await this.o.cloud?.question({ text: obs.question, atSeq });
+      const id = this.o.cloud?.question({ text: obs.question, atSeq });
       this.pendingQuestion = { id, text: obs.question };
       this.o.log.append('agent', obs.question, { kind: 'question', atSeq });
       this.o.say(`${obs.question}  ${chalk.dim('(answer with: sensei reply "...")')}`, 'question');
     }
   }
 
-  /** 面板写进 Firestore inbound 的消息 → 走同一套路由 */
+  /**
+   * 面板写进 Firestore inbound 的消息 → 走同一套路由。
+   * public 会话等于把 ask 开给了整个互联网（codex 验收 #5-13）：
+   * 令牌桶限流（ask 3/分钟、全部 12/分钟），超了丢弃并在终端提示一次；文本截长。
+   */
+  private inboundAllowed(kind: string): boolean {
+    const now = Date.now();
+    this.inboundTimes = this.inboundTimes.filter((t) => now - t < 60_000);
+    this.inboundAskTimes = this.inboundAskTimes.filter((t) => now - t < 60_000);
+    if (this.inboundTimes.length >= 12 || (kind === 'ask' && this.inboundAskTimes.length >= 3)) return false;
+    this.inboundTimes.push(now);
+    if (kind === 'ask') this.inboundAskTimes.push(now);
+    return true;
+  }
+
   attachInbound(): void {
     if (!this.o.cloud) return;
+    let throttleWarned = false;
     this.o.cloud.onInbound((m) => {
+      if (m.text) m.text = m.text.slice(0, 1000);
+      if (!this.inboundAllowed(m.kind)) {
+        this.o.log.append('meta', 'inbound.throttled', { kind: m.kind });
+        if (!throttleWarned) {
+          throttleWarned = true;
+          this.o.say('面板消息太密，开始限流（防止公开会话被刷额度）', 'info');
+        }
+        return;
+      }
       const who = m.by ? ` (${m.by})` : '';
       switch (m.kind) {
         case 'reply':
@@ -280,7 +329,8 @@ export class Brain {
 
   /** IPC 路由 */
   async handle(route: string, body: Record<string, unknown>): Promise<unknown> {
-    const text = String(body.text ?? '').trim();
+    const raw = String(body.text ?? '').trim();
+    const text = raw && this.o.redact ? this.o.redact(raw) : raw;
     switch (route) {
       case '/status':
         return {
@@ -397,6 +447,17 @@ export function quickSignal(slice: string): 'skip' | 'error' | 'ambiguous' {
   if (/\[user → sensei\]/.test(text)) return 'error';
   if (/\b(error|fatal|exception|traceback|panic|denied|not found|no such file|cannot|can't|failed|failure|unrecognized|not recognized|command not found|ENOENT|EACCES|EADDRINUSE|npm ERR!|SyntaxError|TypeError|ReferenceError|segfault|exit code [1-9])\b/i.test(text)) return 'error';
   return 'ambiguous';
+}
+
+/** 两条提示是否算复读：文本相似度高，且关键 token（数字、代码标识符）没有变化 */
+export function isEchoHint(prev: string, next: string): boolean {
+  if (bigramSimilarity(prev, next) <= 0.55) return false;
+  const keyTokens = (s: string) => new Set((s.match(/\d+|[A-Za-z_][\w./:\\-]{2,}/g) ?? []).map((t) => t.toLowerCase()));
+  const A = keyTokens(prev);
+  const B = keyTokens(next);
+  for (const t of B) if (!A.has(t)) return false; // 新提示里出现了旧提示没有的关键 token → 不是复读
+  for (const t of A) if (!B.has(t)) return false;
+  return true;
 }
 
 /** 字符 bigram Jaccard 相似度（0~1）。中英文都好使，够快够糙。 */

@@ -28,7 +28,11 @@ service cloud.firestore {
         allow create: if canSee(sessionDoc(sid))
           && request.resource.data.keys().hasOnly(['kind', 'text', 'value', 'questionId', 'ts', 'by'])
           && request.resource.data.kind in ['reply', 'feedback', 'note', 'ask']
-          && request.resource.data.ts == request.time;
+          && request.resource.data.ts == request.time
+          && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 1000))
+          && (!('value' in request.resource.data) || request.resource.data.value in ['helpful', 'too-basic', 'confusing', 'too-deep', 'just-tell-me', 'let-me-try', 'wrong'])
+          && (!('questionId' in request.resource.data) || (request.resource.data.questionId is string && request.resource.data.questionId.size() <= 64))
+          && (!('by' in request.resource.data) || request.resource.data.by == null || (signedIn() && request.resource.data.by == request.auth.token.email));
         allow update, delete: if false;
       }
 

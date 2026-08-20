@@ -17,13 +17,18 @@ Learning a CLI tool is mostly *doing*: you type, it errors, you search, you try 
 ### What it does
 `sensei start` wraps your shell in a pty. Every keystroke and every byte the terminal prints is captured, **redacted locally** (keys, tokens, emails, home paths never leave the machine), logged, and mirrored to Cloud Firestore.
 
-A background **Observer** agent (Gemini 3.7 Flash via the Google ADK for TypeScript) reads the messy stream — ANSI, stack traces, progress bars — and decides on evidence whether you're flowing, exploring, or stuck. It stays silent by default; when it speaks it's one line, inline in your terminal, in your language, at the level you asked for. It asks a **clarifying question** only when the right hint depends on your intent (`sensei reply` answers it). It **takes notes** the whole time and turns your **feedback** (`sensei fb too-basic | confusing | just-tell-me | let-me-try`) into a learner profile it carries across sessions. `sensei ask` gets a grounded answer from the **Coach**. `sensei done` runs the **Compiler**: commands, errors, notes, milestones and Q&A are synthesized into a step-by-step tutorial with a "pitfalls we hit" table and a 60-second spoken script.
+A background **Observer** agent (Gemini 3.5 Flash-Lite via the Google ADK for TypeScript — high-frequency watching runs on the light tier; the Coach and Compiler run on Gemini 3.7 Flash) reads the messy stream — ANSI, stack traces, progress bars — and decides on evidence whether you're flowing, exploring, or stuck. It stays silent by default; when it speaks it's one line, inline in your terminal, in your language, at the level you asked for. It asks a **clarifying question** only when the right hint depends on your intent (`sensei reply` answers it). It **takes notes** the whole time and turns your **feedback** (`sensei fb too-basic | confusing | just-tell-me | let-me-try`) into a learner profile it carries across sessions. `sensei ask` gets a grounded answer from the **Coach**. `sensei done` runs the **Compiler**: commands, errors, notes, milestones and Q&A are synthesized into a step-by-step tutorial with a "pitfalls we hit" table and a 60-second spoken script.
+
+What makes it distinct:
+- **The three-stage gate**: a free regex filter → a cheap Gemma triage call ("worth a senior engineer's attention?") → only then the Observer. Silence is the default; the gate is why it doesn't nag.
+- **The hint ladder**: first failure gets a nudge or a direction; a repeated failure escalates to the cause; a third gets the fix. The ladder position adapts to the learner profile.
+- **Auto-ask — a feature our first real user taught us**: when a learner types natural language straight into the shell ("这个错到底怎么回事") and the shell errors, Sensei catches it, answers it as a question, and teaches the `sensei ask` syntax once.
 
 A **web panel** on Firebase Hosting shows the live session, hints, notes, questions, the profile and the compiled tutorial — for you on a second screen, or for a mentor/judge watching along; replies and feedback typed on the panel flow back into the terminal session through a Firestore `inbound` collection.
 
 ### How we built it
 - **CLI (Node 24, TypeScript)**: node-pty wrapper, ANSI cleaning, regex redaction, JSONL session log, local IPC for the sub-commands.
-- **Agents (@google/adk)**: Observer (structured JSON output, thinking off for latency), Coach, Compiler — all Gemini 3.7 Flash with automatic fallback to 3.5 Flash and a per-model circuit breaker; a **Gemma 4** triage gate decides whether the expensive model needs to look at all; a free regex pre-filter runs before both.
+- **Agents (@google/adk `LlmAgent` + `InMemoryRunner`)**: Observer on Gemini 3.5 Flash-Lite (structured JSON, thinking off for latency), Coach and Compiler on Gemini 3.7 Flash — each with per-attempt timeouts, automatic model fallback and a quota-aware circuit breaker; a **Gemma 4** triage gate decides whether a bigger model needs to look at all; a free regex pre-filter runs before both.
 - **Google Cloud**: Cloud Firestore for every session artifact and as the realtime bus between CLI and panel; Firebase Hosting for the panel; Firebase Auth (Google) for owner-only sessions; security rules that let public sessions be read by anyone and clients only append to `inbound`.
 - **Panel**: React + Vite + Firebase Web SDK, realtime `onSnapshot` listeners.
 
@@ -46,7 +51,7 @@ Voice hints (Gemini Live), a VS Code terminal integration, per-tool skill packs 
 typescript, node.js, node-pty, google-adk, gemini-3.7-flash, gemma-4, cloud-firestore, firebase-hosting, firebase-auth, react, vite
 
 ## Links
-- Repo: <TODO GitHub URL>
+- Repo: https://github.com/Claude-Ovo/sensei (public at submission time)
 - Panel: https://sensei-agent.web.app
 - Video: <TODO YouTube URL>
 - Blog (bonus): <TODO dev.to URL>
