@@ -5,7 +5,9 @@
 **All Things Agentic Hackathon 2026 · Collaborative Partner track**
 Built with Gemini 3.7 Flash · Google ADK (TypeScript) · Cloud Firestore · Firebase Hosting
 
-<!-- TODO: demo video link + hosted panel URL -->
+**Live panel:** https://sensei-agent.web.app  ·  Demo video: added at submission
+
+<!-- TODO: demo video link at submission -->
 
 ## The friction
 
@@ -47,6 +49,7 @@ Configure `~/.sensei/.env`:
 
 ```
 GEMINI_API_KEY=...               # required for coaching
+SENSEI_LANG=en                   # hint language (default en; zh-CN also supported)
 SENSEI_MODEL=gemini-3.7-flash    # default
 # optional cloud mirror + web panel:
 SENSEI_SERVICE_ACCOUNT=~/.sensei/service-account.json

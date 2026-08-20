@@ -60,7 +60,7 @@
   <text x="572" y="100" class="h2" style="fill:#1a7f37">three-stage gate, per quiet moment</text>
   <text x="572" y="120" class="lbl">1. regex, free: skip prompt-only · escalate errors</text>
   <text x="572" y="139" class="lbl">2. triage, Gemma 4: worth attention now?</text>
-  <text x="572" y="158" class="lbl">3. observe, Gemini 3.7 Flash via ADK → JSON</text>
+  <text x="572" y="158" class="lbl">3. observe, Gemini 3.5 Flash-Lite via ADK → JSON</text>
   <text x="586" y="176" class="mono">status · stuck_reason · hint</text>
   <text x="586" y="191" class="mono">question · note · milestone</text>
   <text x="586" y="206" class="mono">profile_update</text>
@@ -68,7 +68,7 @@
 
   <!-- agents -->
   <rect x="306" y="256" width="510" height="118" rx="6" class="box"/>
-  <text x="318" y="276" class="h2">agents — @google/adk LlmAgent · Gemini API · key stays local</text>
+  <text x="318" y="276" class="h2">agents — @google/adk · observer 3.5 Flash-Lite · coach/compiler 3.7 Flash</text>
   <rect x="318" y="288" width="150" height="70" rx="4" class="box"/>
   <text x="393" y="308" text-anchor="middle" class="h2" style="font-size:12.5px">Observer</text>
   <text x="393" y="325" text-anchor="middle" class="s">background loop</text>

@@ -45,7 +45,7 @@ export function defaultProfile(): LearnerProfile {
     style: 'hint-first',
     knownConcepts: [],
     weakSpots: [],
-    language: process.env.SENSEI_LANG || 'zh-CN',
+    language: process.env.SENSEI_LANG || 'en',
     feedback: {},
   };
 }
@@ -65,7 +65,10 @@ export function loadProfile(): LearnerProfile {
     return p;
   }
   try {
-    return { ...defaultProfile(), ...JSON.parse(readFileSync(FILE, 'utf8')) };
+    const p = { ...defaultProfile(), ...JSON.parse(readFileSync(FILE, 'utf8')) } as LearnerProfile;
+    // 运行时 SENSEI_LANG 永远赢——评委 export SENSEI_LANG=en 即整场英文，不被旧画像里的语言钉死
+    if (process.env.SENSEI_LANG) p.language = process.env.SENSEI_LANG;
+    return p;
   } catch {
     return defaultProfile();
   }

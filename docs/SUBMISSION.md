@@ -47,6 +47,9 @@ Silence is a feature. Evidence in the prompt beats thinking budget for this job.
 ### What's next
 Voice hints (Gemini Live), a VS Code terminal integration, per-tool skill packs (git, docker, MCP), and turning the 60-second scripts into real short videos.
 
+## Data sources
+The only data processed is the learner's own local terminal stream (stdout/stderr and typed commands), locally redacted before any storage. No third-party datasets.
+
 ## Built with
 typescript, node.js, node-pty, google-adk, gemini-3.7-flash, gemma-4, cloud-firestore, firebase-hosting, firebase-auth, react, vite
 
@@ -59,6 +62,6 @@ typescript, node.js, node-pty, google-adk, gemini-3.7-flash, gemma-4, cloud-fire
 
 ## Testing instructions (for judges)
 1. Node ≥ 24. `git clone https://github.com/Claude-Ovo/sensei.git && cd sensei && npm install && npm run build && npm -w @sensei/cli link`
-2. `~/.sensei/.env` → `GEMINI_API_KEY=…` (Gemini API key). Cloud mirror is optional; without a service account Sensei runs fully offline.
+2. `~/.sensei/.env` → `GEMINI_API_KEY=…` (Gemini API key). Set `SENSEI_LANG=en` for English coaching (default). Cloud mirror is optional; without a service account Sensei runs fully offline.
 3. `sensei start -g "learn git: make my first commit"` → work as usual → `sensei ask "…"` → `sensei done` → `exit`.
 4. Public demo sessions are visible at https://sensei-agent.web.app without signing in.
