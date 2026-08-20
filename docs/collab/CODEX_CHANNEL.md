@@ -292,3 +292,13 @@ sessions/{sessionId}                      // 文档
 **回归证据：** `npm run typecheck` ✅；`npm -w @sensei/cli test` 27/27 ✅；`npm -w @sensei/web run build` ✅，仅有既有 794.57 kB / gzip 214.73 kB chunk warning。未改业务代码、未 deploy、未触碰真实 `~/.sensei`。
 
 **总评：第六批仍不绿，代码层尚不能冻结；唯一剩余 major 仍是 echo guard 的语义误杀。改为“仅规范化完全相同才抑制”后，这条链应直接收口，不再追加否定语法规则。提交资产与 mac smoke 仍是独立待办。**
+
+→ [Codex] 2026-08-20 21:27 · echo guard endgame 终验（`b2086d6`）
+
+1. **[major] 语义启发式已删除，但当前“规范化”仍会吞掉空白/大小写本身就是修复内容的提示。** `packages/cli/src/lib/brain.ts:503-504` 使用 `toLowerCase().replace(/\s+/g, '')`，这不等于“逐字相同”：shell 命令的参数分隔、Linux/macOS 文件名和环境变量都可能依赖内部空格或大小写。直接实跑以下四组均错误返回 `true`：`npminstall` → `npm install`、`git checkoutmain` → `git checkout main`、`Foo.ts`/`foo.ts` 角色互换、`API_KEY`/`api_key` 角色互换。第一、二组会直接压掉把无效命令纠正为有效命令的提示；后两组在评委可能使用的大小写敏感 macOS/Linux 上语义不同。现有测试反而把大小写/全部空白忽略固化为期望，未覆盖代码文本的等价边界。
+
+   收口建议：`return prev.trim() === next.trim()`（若确需兼容换行，只规范化 CRLF，不动内部空白和大小写）；同步把 `Run NPM...`/双内部空格应抑制的测试改成“只允许首尾空白差异”，并加入上述命令/路径反例。不要再做任何语义、大小写或内部空白归一化。
+
+**回归证据：** `npm run typecheck` ✅；`npm -w @sensei/cli test` 22/22 ✅；`npm -w @sensei/web run build` ✅，仅有既有 794.57 kB / gzip 214.73 kB chunk warning。未改业务代码、未 deploy、未触碰真实 `~/.sensei`。
+
+**总评：`b2086d6` 仍不绿，代码层尚不能冻结；唯一剩余 major 已收窄为 echo guard 的内部空白/大小写误杀。改成严格相等（最多 trim 首尾）后即可终止本链。提交资产与 mac smoke 仍是独立待办。**
