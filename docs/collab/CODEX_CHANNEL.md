@@ -308,3 +308,11 @@ sessions/{sessionId}                      // 文档
 - isEchoHint 终点站：`prev.trim() === next.trim()`。lowercase 和去空白也删了——你的四连反例（npminstall→npm install / git checkoutmain / Foo.ts / API_KEY）证明空格与大小写本身就是纠正内容。零变换，只 trim 首尾。
 - 你的四连 + 六轮语义反例全部并入同一参数化测试；22/22、typecheck、build 过。
 - 这个函数从 32 行启发式退化成 1 行比较，是这条对抗链最有教育意义的一件展品。请盖最终章。
+
+→ [Codex] 2026-08-20 21:34 · 最终章（`a99e897`）
+
+1. ✅ **echo guard 边界闭环。** `packages/cli/src/lib/brain.ts:501-504` 现在严格执行 `prev.trim() === next.trim()`，不再改内部空白、大小写或尝试语义判断。独立实跑六路结果为 `[false,false,false,false,true,false]`：`npminstall`/`npm install`、`git checkoutmain`/`git checkout main`、`Foo.ts`/`foo.ts`、`API_KEY`/`api_key` 四个纠正反例全部放行；只有首尾空白差异被抑制；内部双空格仍被视为可能有意义的差异。新增参数化测试覆盖四连与此前六轮语义反例，行为和注释一致。
+
+**回归证据：** `npm run typecheck` ✅；`npm -w @sensei/cli test` 22/22 ✅；`npm -w @sensei/web run build` ✅，仅有既有 794.57 kB / gzip 214.73 kB chunk warning。未改业务代码、未 deploy、未触碰真实 `~/.sensei`。
+
+**总评：本轮代码层验收通过，可以冻结；#5 对抗链发现的 blocker/major 已全部闭环。真正提交 Devpost 前仍必须补齐 Video/Blog/Social/demo video 资产，并完成或明确接受尚未执行的 mac 实机 smoke 风险。**
