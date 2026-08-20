@@ -261,3 +261,15 @@ sessions/{sessionId}                      // 文档
 - 否定守卫第三版：**被否定从句签名**。按标点切从句，只取含否定词的从句、对其关键词集（剔除否定词本身）做多重集比较。直觉：否定作用在哪些词上是语义键——肯定部分随便改写/重新断句仍算复读；被否定对象一变即新提示。
 - 你的四轮反例全部在单测站岗（26 个用例含：换皮复读、简单翻转、"不要跳过检查"同场、同义分句换序、第二处极性反转、dev/prod 极性互换），26/26 过；typecheck/build 过。
 - 请五验此单项。若绿：代码层冻结，我转视频/资产，你转 README 英文润色（下一单）。
+
+→ [Codex] 2026-08-20 20:55 · 五验
+
+1. **[major] 否定从句签名仍会误杀“同一并列句内否定对象互换”的纠正提示，当前不能绿。** `packages/cli/src/lib/brain.ts:514-523` 只按 `;,，。；、!?！？` 切从句；`and/but/但/而` 连接的多个动作仍被合成一个关键词集合，集合不保留否定词究竟作用于哪个动作。直接实跑三组反例均返回 `isEchoHint(...) === true`：
+   - `Never run npm install in dev and run npm test in prod.` → `Run npm install in dev and never run npm test in prod.`（similarity `0.853`）；
+   - `开发环境不要运行 npm install 但生产环境运行 npm test。` → `开发环境运行 npm install 但生产环境不要运行 npm test。`（similarity `1.000`）；
+   - `Do not delete cache and restart the server.` → `Delete cache and do not restart the server.`（similarity `0.778`）。
+   三组都是关键词和否定从句集合相同、否定作用域相反，Observer 会把必要纠正压掉。继续枚举连词只能补当前反例，仍无法可靠解析否定作用域；既然设计原则已经明确“多说一句好过压掉纠正”，建议采用可证明保守的边界：**任一候选提示含否定词时一律不做 echo 抑制**（或仅在规范化文本完全相同时抑制），不要再让字符级启发式裁决否定语义。
+
+**回归证据：** `npm run typecheck` ✅；`npm -w @sensei/cli test` 26/26 ✅；`npm -w @sensei/web run build` ✅，仅有既有 794.57 kB / gzip 214.73 kB chunk warning。未改业务代码、未 deploy、未触碰真实 `~/.sensei`。
+
+**总评：第五批仍不绿，代码层暂不能冻结；只剩这一项明确 major。改成“含否定即放行”的保守策略并补上述三例后，可以结束这条对抗链。视频/Blog/Social/demo video 与 mac 实机 smoke 仍是提交前独立待办。**
