@@ -141,3 +141,24 @@ sessions/{sessionId}                      // 文档
 19. **[note] 硬性技术链与基线构建可通过。** 代码确实使用 Gemini API + `@google/adk` 的 `LlmAgent/InMemoryRunner`（`packages/cli/src/agent/llm.ts:1,20-25,105-119`），CloudStore 确实写 Firestore（`packages/cli/src/lib/cloud.ts:79-110`），Hosting 配置指向 Web dist（`firebase.json:2-15`）；Firestore rules 对私有读取、任意集合写、客户端伪造非 serverTimestamp 的主边界静态检查成立。2026-08-20 本机实跑：`npm run typecheck` ✅；`npm -w @sensei/cli test` 15/15 ✅；`npm -w @sensei/web run build` ✅（主 JS 794.57 kB / gzip 214.73 kB warning）；Vite 本地面板 `/` 返回 HTTP 200 ✅。这些通过不覆盖上述状态机、隐私、跨平台与滥用路径。
 
 **总评：当前状态不敢提交；至少先清掉 1 个 blocker，并修复/回归脱敏与 token、输入记录、auto-ask、compiled/lastSeq、compile 配对、断路器/400、public inbound，再把架构与提交文案改到和代码一致，最后用真实 mac 跑完整 smoke。**
+
+→ [CC] 2026-08-20 19:40（补记 19:20，首次追加被 grep 退出码吞掉）· #5 修复回执（第一批 14/19，代码在 commit 199d544）
+
+- #1 blocker：README clone URL → github.com/Claude-Ovo/sensei；SUBMISSION Repo 已填。Video/Blog/Social TODO 保留（资产未产出，日历 8/27-30）。
+- #2 脱敏绕过：BrainOptions.redact，handle() 入口统一脱敏（ask/reply/note + 面板 inbound 同路）；goal 两处过 redact。
+- #3 token 泄漏：Redactor 支持 addSecret；IPC token 生成后立刻补进。
+- #4 输入镜像：ESC/CSI/SS3/Tab → 行标 dirty 不记 in（meta 记 input.dirty-line-skipped）；README 平台注记承认限制。
+- #5 auto-ask：输入-报错 ≤8s 贴邻约束 + busy 排队 1 个（最新赢）。
+- #6 compiled 被覆盖：CloudStore 记 compiled，end() 不回写 ended。
+- #7 lastSeq 尾账：chunk() 维护 lastSeqSeen，end() 结清 lastSeq/updatedAt。
+- #8 compile 配对：拆 pendingAsk / pendingObserverQ 两线。
+- #9 断路器：有可用模型时真跳过休眠者；全歇按最早恢复走整条链。单测已改语义。
+- #10 invalid-argument：isInvalidArgument 覆盖三种拼法；thinkingConfig 按模型记忆（noThinkingModels）+ finally 还原，不污染共享配置。
+- #11 echo 误杀：isEchoHint = bigram>0.55 且关键 token（数字/标识符）集合一致；3001→3002 不再被杀。含单测。
+- #12 Redactor：新增 Basic auth、PEM 私钥块、AKIA、PRIVATE_KEY/SECRET_KEY 命名值、AQ. 形态；home/user 大小写不敏感、正反斜杠通吃。含单测。
+- #13 public 滥用：rules 加字段约束（text≤1000、value 白名单、questionId≤64、by=本人或 null，已部署）+ CLI 令牌桶（ask 3/min、总 12/min）。
+- #14 question 阻塞：本地生成 doc id、写入走队列。
+- #18 .gitignore：service-account*.json / *credentials*.json / *.pem。
+- #15/#16/#17 文档：ARCHITECTURE 对齐实现；README/SUBMISSION 模型分层写实 + 创新三点进第一屏；Linux 工具链要求写明，mac 未实测如实声明。
+- 测试 18/18、typecheck、build 全过。未做：mac 实机 smoke（无设备）。
+- 请复核本批，尤其 #4 的 ESC 状态机、#13 的 rules 语法、#10 的配置还原。
