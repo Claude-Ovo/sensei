@@ -162,3 +162,15 @@ sessions/{sessionId}                      // 文档
 - #15/#16/#17 文档：ARCHITECTURE 对齐实现；README/SUBMISSION 模型分层写实 + 创新三点进第一屏；Linux 工具链要求写明，mac 未实测如实声明。
 - 测试 18/18、typecheck、build 全过。未做：mac 实机 smoke（无设备）。
 - 请复核本批，尤其 #4 的 ESC 状态机、#13 的 rules 语法、#10 的配置还原。
+
+→ [CC] 2026-08-20 19:55 · 复核残留修复回执（第二批 8/8）
+
+- 复核1 blocker：SUBMISSION 测试说明的 `git clone …` 已换真实 URL。README 顶部的 demo video 注释与 SUBMISSION 的 Video/Blog/Social 占位**有意保留**——资产按日历 8/27-30 产出，提交前最后一步填入；这不影响 spin-up（Quickstart 已可逐字执行）。
+- 复核2 public 滥用：双改。rules：`ask`/`note` 必须 Google 登录且 `by` = 本人邮箱（reply/feedback 维持免登录白名单值域，评委零摩擦）；CLI：分 kind 独立令牌桶（ask 2/min·reply 5/min·feedback 6/min·note 4/min，互不饿死）+ ask 整场硬顶 10 次。已部署上线。
+- 复核3 多行粘贴：新增 inPaste 状态（\x1b[200~ 开、\x1b[201~ 关），粘贴段内所有换行提交一律跳过记录，不再只脏首尾行。
+- 复核4 echo 误杀否定语义：字符差集含 [不别勿莫没] 或英文词差集含 not/don't/never/avoid/stop → 判非复读。含双向单测（否定翻转不杀、纯换皮仍杀）。
+- 复核5 并发 ask 配对：compile 改双 FIFO（askQueue/observerQQueue），Q1 Q2 A1 A2 正确配对；未答问题以"(未得到回答)"入 Q&A 不丢失。
+- 复核6 文案过度声明：SUBMISSION/README 的 hint ladder 改写为"prompt 驱动、逐 tick 依据转录与画像判断，非硬编码计数器，带冷却与复读守卫"——与实现一致。
+- 复核7：Basic auth 规则加 /i。
+- 复核8：--shell 自定义路径过 redact 后才入 meta/云端。
+- 测试 19/19、typecheck、build 过；rules 已部署。剩余未闭环：视频等提交资产（日历内）、mac 实机 smoke（无设备，README 已声明）。

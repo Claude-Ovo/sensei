@@ -60,8 +60,8 @@ export class Brain {
   private lastAutoAsked = '';
   private autoAskBusy = false;
   private pendingAutoAsk: string | null = null;
-  private inboundTimes: number[] = [];
-  private inboundAskTimes: number[] = [];
+  private inboundBuckets = new Map<string, number[]>();
+  private inboundAskTotal = 0;
   private lastObservedSeq = 0;
   private startedAt = Date.now();
   private llmError: string | null = null;
@@ -277,11 +277,17 @@ export class Brain {
    */
   private inboundAllowed(kind: string): boolean {
     const now = Date.now();
-    this.inboundTimes = this.inboundTimes.filter((t) => now - t < 60_000);
-    this.inboundAskTimes = this.inboundAskTimes.filter((t) => now - t < 60_000);
-    if (this.inboundTimes.length >= 12 || (kind === 'ask' && this.inboundAskTimes.length >= 3)) return false;
-    this.inboundTimes.push(now);
-    if (kind === 'ask') this.inboundAskTimes.push(now);
+    // 每类各自的桶：一类被刷不饿死其他类；ask 另有整场上限（20 次/日免费额度的保命绳）
+    const bucket = this.inboundBuckets.get(kind) ?? [];
+    const fresh = bucket.filter((t) => now - t < 60_000);
+    const perMinute: Record<string, number> = { ask: 2, reply: 5, feedback: 6, note: 4 };
+    if (fresh.length >= (perMinute[kind] ?? 4)) return false;
+    if (kind === 'ask') {
+      if (this.inboundAskTotal >= 10) return false; // 整场硬顶
+      this.inboundAskTotal++;
+    }
+    fresh.push(now);
+    this.inboundBuckets.set(kind, fresh);
     return true;
   }
 
@@ -457,6 +463,18 @@ export function isEchoHint(prev: string, next: string): boolean {
   const B = keyTokens(next);
   for (const t of B) if (!A.has(t)) return false; // 新提示里出现了旧提示没有的关键 token → 不是复读
   for (const t of A) if (!B.has(t)) return false;
+  // "请先运行 X" vs "请先不要运行 X"：字符差集里出现否定词 → 语义相反，不是复读（codex 复核 #4）
+  const only = (a: string, b: string) => {
+    const bs = new Set(b);
+    return [...a].filter((c) => !bs.has(c)).join('');
+  };
+  const diff = only(prev, next) + only(next, prev);
+  if (/[不别勿莫没]/.test(diff)) return false;
+  const wordDiff = (a: string, b: string) => {
+    const bw = new Set((b.toLowerCase().match(/[a-z']+/g) ?? []));
+    return (a.toLowerCase().match(/[a-z']+/g) ?? []).filter((w) => !bw.has(w)).join(' ');
+  };
+  if (/\b(not|don't|dont|never|avoid|stop)\b/.test(wordDiff(prev, next) + ' ' + wordDiff(next, prev))) return false;
   return true;
 }
 

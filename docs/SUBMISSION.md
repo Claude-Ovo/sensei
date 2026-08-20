@@ -21,7 +21,7 @@ A background **Observer** agent (Gemini 3.5 Flash-Lite via the Google ADK for Ty
 
 What makes it distinct:
 - **The three-stage gate**: a free regex filter → a cheap Gemma triage call ("worth a senior engineer's attention?") → only then the Observer. Silence is the default; the gate is why it doesn't nag.
-- **The hint ladder**: first failure gets a nudge or a direction; a repeated failure escalates to the cause; a third gets the fix. The ladder position adapts to the learner profile.
+- **The hint ladder**: an escalation the Observer's prompt drives — early failures get a nudge or a direction, repeated evidence of the same failure earns the cause, persistence earns the fix. It's judged from the transcript against the learner profile each tick (model-guided, not a hard-coded counter), with a cooldown and an echo guard so it never repeats itself.
 - **Auto-ask — a feature our first real user taught us**: when a learner types natural language straight into the shell ("这个错到底怎么回事") and the shell errors, Sensei catches it, answers it as a question, and teaches the `sensei ask` syntax once.
 
 A **web panel** on Firebase Hosting shows the live session, hints, notes, questions, the profile and the compiled tutorial — for you on a second screen, or for a mentor/judge watching along; replies and feedback typed on the panel flow back into the terminal session through a Firestore `inbound` collection.
@@ -58,7 +58,7 @@ typescript, node.js, node-pty, google-adk, gemini-3.7-flash, gemma-4, cloud-fire
 - Social (bonus): <TODO X/LinkedIn URL with #AllThingsAgenticHackathon>
 
 ## Testing instructions (for judges)
-1. Node ≥ 24. `git clone … && npm install && npm run build && npm -w @sensei/cli link`
+1. Node ≥ 24. `git clone https://github.com/Claude-Ovo/sensei.git && cd sensei && npm install && npm run build && npm -w @sensei/cli link`
 2. `~/.sensei/.env` → `GEMINI_API_KEY=…` (Gemini API key). Cloud mirror is optional; without a service account Sensei runs fully offline.
 3. `sensei start -g "learn git: make my first commit"` → work as usual → `sensei ask "…"` → `sensei done` → `exit`.
 4. Public demo sessions are visible at https://sensei-agent.web.app without signing in.

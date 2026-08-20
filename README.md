@@ -18,7 +18,7 @@ Sensei fixes that by living **inside** the terminal session:
 - It **asks a clarifying question** only when the right hint depends on your intent.
 - It **takes notes** the whole time (what was tried, what failed, why, what worked) and captures **feedback** (`too-basic`, `confusing`, `just-tell-me`, `let-me-try`) into a learner profile so it adapts to how you think.
 - `sensei done` runs the **Compiler** agent: the entire session — commands, errors, notes, milestones, Q&A — is synthesized into a step-by-step tutorial with a "pitfalls we hit" table and a 60-second spoken script. You learned it; now you can teach it.
-- **Three-stage gate** (free regex → cheap Gemma triage → Gemini Observer) keeps it silent by default; a **hint ladder** escalates nudge → direction → cause → fix only as failures repeat; and **auto-ask** — a feature our first zero-background user taught us — catches natural language typed straight into the shell and answers it as a question.
+- **Three-stage gate** (free regex → cheap Gemma triage → Gemini Observer) keeps it silent by default; a **hint ladder** escalates nudge → direction → cause → fix as failures repeat (prompt-driven against the transcript and learner profile, guarded by a cooldown and an echo filter); and **auto-ask** — a feature our first zero-background user taught us — catches natural language typed straight into the shell and answers it as a question.
 - A **web panel** (Firebase Hosting) shows the live session, hints, notes, questions, the learner profile and the compiled tutorial — for you on a second screen, or for a mentor/reviewer watching along.
 
 ## Architecture

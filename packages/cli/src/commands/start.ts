@@ -113,7 +113,7 @@ export async function start(opts: StartOptions) {
     } as Record<string, string>,
   });
 
-  const startMeta = { shell, cwd: redact(process.cwd()), platform: process.platform, goal: opts.goal ? redact(opts.goal) : null };
+  const startMeta = { shell: redact(shell), cwd: redact(process.cwd()), platform: process.platform, goal: opts.goal ? redact(opts.goal) : null };
   log.append('meta', 'session.start', { ...startMeta, public: !!opts.public });
   cloud?.start({
     ...startMeta,
@@ -142,6 +142,7 @@ export async function start(opts: StartOptions) {
   stdin.resume();
   stdin.setEncoding('utf8');
   let lineDirty = false;
+  let inPaste = false; // bracketed paste 模式：整段（含中间行）都不记，直到 201~ 结束
   let esc = ''; // 正在吞的 ESC 序列
   stdin.on('data', (key: string) => {
     term.write(key);
@@ -151,6 +152,8 @@ export async function start(opts: StartOptions) {
         // CSI: ESC [ ... 终止于 @-~；两字符序列: ESC + 单字符
         const done = esc.length === 2 ? esc[1] !== '[' && esc[1] !== ']' && esc[1] !== 'O' : /[@-~]/.test(ch);
         if (done) {
+          if (esc === '\x1b[200~') inPaste = true;
+          else if (esc === '\x1b[201~') inPaste = false;
           // 任何 CSI（方向键/历史/光标移动/粘贴标记）都会让我们的镜像失真——一律标脏
           if (esc.startsWith('\x1b[') || esc.startsWith('\x1bO')) lineDirty = true;
           esc = '';
@@ -164,8 +167,8 @@ export async function start(opts: StartOptions) {
       if (ch === '\r' || ch === '\n') {
         const cmd = lineBuf.trim();
         lineBuf = '';
-        if (cmd && !lineDirty) brain.ingest(log.append('in', redact(cmd)));
-        else if (lineDirty) log.append('meta', 'input.dirty-line-skipped');
+        if (cmd && !lineDirty && !inPaste) brain.ingest(log.append('in', redact(cmd)));
+        else if (lineDirty || inPaste) log.append('meta', 'input.dirty-line-skipped');
         lineDirty = false;
         // 命令已回显，攒着的提示现在打出来
         setTimeout(flushSays, 60);

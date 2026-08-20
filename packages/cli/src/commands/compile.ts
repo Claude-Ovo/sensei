@@ -33,36 +33,36 @@ export async function compile(sessionId: string | undefined, opts: { offline?: b
   const notes: string[] = [];
   const milestones: string[] = [];
   const qa: Array<{ q: string; a: string }> = [];
-  // 两类问答分开配对（codex 验收 #5-8）：
-  // - learner ask → agent answer（Coach 线）
+  // 两类问答分开配对，各自 FIFO（codex 验收 #5-8 + 复核 #5）：
+  // - learner ask → agent answer（Coach 线；IPC 允许并发 ask，Q1 Q2 A1 A2 按先进先出配对）
   // - agent question → learner reply（Observer 澄清线）
-  // 合法交错（question 未答期间插入一对 ask/answer）不会串线。
-  let pendingAsk: string | null = null;
-  let pendingObserverQ: string | null = null;
+  const askQueue: string[] = [];
+  const observerQQueue: string[] = [];
   for (const c of chunks) {
     const kind = c.meta?.kind as string | undefined;
     if (c.kind === 'agent') {
       if (kind === 'note') notes.push(c.text);
       else if (kind === 'milestone') milestones.push(c.text);
-      else if (kind === 'question') pendingObserverQ = c.text;
-      else if (kind === 'answer' && pendingAsk) {
-        qa.push({ q: pendingAsk, a: c.text });
-        pendingAsk = null;
+      else if (kind === 'question') observerQQueue.push(c.text);
+      else if (kind === 'answer' && askQueue.length) {
+        qa.push({ q: askQueue.shift()!, a: c.text });
       }
       continue;
     }
     if (c.kind === 'user') {
       if (kind === 'note') notes.push(`(learner) ${c.text}`);
-      else if (kind === 'ask') pendingAsk = c.text;
-      else if (kind === 'reply' && pendingObserverQ) {
-        qa.push({ q: pendingObserverQ, a: `(learner) ${c.text}` });
-        pendingObserverQ = null;
+      else if (kind === 'ask') askQueue.push(c.text);
+      else if (kind === 'reply' && observerQQueue.length) {
+        qa.push({ q: observerQQueue.shift()!, a: `(learner) ${c.text}` });
       }
       transcript.push(c);
       continue;
     }
     if (c.kind === 'in' || c.kind === 'out') transcript.push(c);
   }
+  // 没等到答案的问题也别丢——教程里"提了但没答"的问题是真实过程的一部分
+  for (const q of askQueue) qa.push({ q, a: '(未得到回答)' });
+  for (const q of observerQQueue) qa.push({ q, a: '(学习者未回答)' });
 
   process.stderr.write(chalk.dim(`[sensei] compiling session ${id} · ${chunks.length} chunks · ${notes.length} notes · ${milestones.length} milestones\n`));
   const compiler = new Compiler(cfg);

@@ -46,3 +46,11 @@ test('redactor: basic auth, private key, AWS key, runtime secret, case-insensiti
   r.addSecret('tok_runtime_secret_1');
   assert.equal(r('echo tok_runtime_secret_1'), 'echo <REDACTED>');
 });
+
+test('isEchoHint: negation flip is NOT an echo', async () => {
+  const { isEchoHint } = await import('../src/lib/brain.js');
+  assert.ok(!isEchoHint('请先运行 npm install 再启动服务。', '请先不要运行 npm install，先检查 package.json。'));
+  assert.ok(!isEchoHint('Run npm install first.', "Don't run npm install first."));
+  // 纯换皮复读仍然要被抓
+  assert.ok(isEchoHint('请在 package.json 中添加 "type": "module" 配置。', '请打开 package.json，加上 "type": "module" 配置。'));
+});
