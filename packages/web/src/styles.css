@@ -118,6 +118,27 @@ a {
   gap: 16px;
 }
 
+.language-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  font: 500 10px/1 var(--font-mono);
+}
+
+.language-toggle:hover {
+  color: var(--muted);
+}
+
+.language-toggle .is-active {
+  color: var(--accent);
+}
+
 .account-label {
   max-width: 260px;
   overflow: hidden;
@@ -1150,6 +1171,10 @@ input::placeholder {
   .wordmark small,
   .account-label {
     display: none;
+  }
+
+  .header-actions {
+    gap: 9px;
   }
 
   .button-quiet {

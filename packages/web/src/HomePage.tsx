@@ -11,6 +11,8 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { useI18n } from './i18n';
+import type { Language } from './language';
 import type { SessionData, SessionState } from './types';
 
 interface HomePageProps {
@@ -27,10 +29,11 @@ function sortSessions(sessions: SessionData[]): SessionData[] {
 }
 
 export function HomePage({ user, authReady }: HomePageProps) {
+  const { copy } = useI18n();
   const [publicSessions, setPublicSessions] = useState<SessionData[]>([]);
   const [ownedSessions, setOwnedSessions] = useState<SessionData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<'public' | 'private' | null>(null);
   const [sessionId, setSessionId] = useState('');
 
   useEffect(() => {
@@ -42,7 +45,7 @@ export function HomePage({ user, authReady }: HomePageProps) {
         setLoading(false);
       },
       () => {
-        setError('公开会话暂时无法加载。请稍后重试，或直接输入 sessionId。');
+        setError('public');
         setLoading(false);
       },
     );
@@ -58,7 +61,7 @@ export function HomePage({ user, authReady }: HomePageProps) {
     return onSnapshot(
       ownedQuery,
       (snapshot) => setOwnedSessions(readSessions(snapshot)),
-      () => setError('你的私有会话暂时无法加载，请刷新后重试。'),
+      () => setError('private'),
     );
   }, [user?.email]);
 
@@ -77,38 +80,38 @@ export function HomePage({ user, authReady }: HomePageProps) {
   return (
     <main className="home-page">
       <section className="home-intro" aria-labelledby="home-title">
-        <h1 id="home-title">学习现场</h1>
-        <p className="intro-copy">查看终端输出、Sensei 的判断与反馈记录。</p>
+        <h1 id="home-title">{copy.home.title}</h1>
+        <p className="intro-copy">{copy.home.intro}</p>
       </section>
 
       <form className="session-join" onSubmit={openSession}>
-        <label htmlFor="session-id">已有 sessionId</label>
+        <label htmlFor="session-id">{copy.home.sessionLabel}</label>
         <div className="join-controls">
           <input
             id="session-id"
             value={sessionId}
             onChange={(event) => setSessionId(event.target.value)}
-            placeholder="输入 sessionId"
+            placeholder={copy.home.sessionPlaceholder}
             autoComplete="off"
           />
           <button className="button button-primary" type="submit" disabled={!sessionId.trim()}>
-            打开会话
+            {copy.home.openSession}
           </button>
         </div>
       </form>
 
       <section className="session-section" aria-labelledby="sessions-title">
         <div className="section-heading">
-          <h2 id="sessions-title">最近会话</h2>
-          <span className="session-count">{sessions.length} 个</span>
+          <h2 id="sessions-title">{copy.home.recentSessions}</h2>
+          <span className="session-count">{copy.home.sessionCount(sessions.length)}</span>
         </div>
 
-        {error ? <div className="notice notice-error">{error}</div> : null}
+        {error ? <div className="notice notice-error">{error === 'public' ? copy.home.publicLoadError : copy.home.privateLoadError}</div> : null}
         {loading || !authReady ? <SessionListSkeleton /> : null}
         {!loading && authReady && sessions.length === 0 ? (
           <div className="empty-state">
-            <h3>还没有可见会话</h3>
-            <p>运行 `sensei start` 创建会话，或登录查看与你邮箱关联的私有会话。</p>
+            <h3>{copy.home.noSessions}</h3>
+            <p>{copy.home.noSessionsDetail}</p>
           </div>
         ) : null}
         {sessions.length > 0 ? (
@@ -124,16 +127,18 @@ export function HomePage({ user, authReady }: HomePageProps) {
 }
 
 function SessionCard({ session }: { session: SessionData }) {
+  const { copy, language } = useI18n();
+
   return (
     <a className="session-card" href={`#/s/${encodeURIComponent(session.id)}`}>
       <div className="session-card-main">
         <div className="session-card-topline">
           <StateBadge state={session.state} />
-          {session.status ? <span className="status-label">{sessionStatusCopy[session.status]}</span> : null}
-          <span className="session-output-count">{session.lastSeq ?? 0} 条</span>
-          <time>{formatTime(session.updatedAt?.toDate())}</time>
+          {session.status ? <span className="status-label">{copy.status[session.status]}</span> : null}
+          <span className="session-output-count">{copy.home.outputCount(session.lastSeq ?? 0)}</span>
+          <time>{formatTime(session.updatedAt?.toDate(), language)}</time>
         </div>
-        <h3>{session.goal || '未命名学习目标'}</h3>
+        <h3>{session.goal || copy.home.unnamedGoal}</h3>
         <p className="session-id">{session.id}</p>
       </div>
       <span className="card-arrow" aria-hidden="true">
@@ -144,22 +149,13 @@ function SessionCard({ session }: { session: SessionData }) {
 }
 
 export function StateBadge({ state }: { state: SessionState }) {
-  const label = state === 'active' ? '进行中' : state === 'compiled' ? '已编译' : '已结束';
-  return <span className={`state-badge state-${state}`}>{label}</span>;
+  const { copy } = useI18n();
+  return <span className={`state-badge state-${state}`}>{copy.state[state]}</span>;
 }
 
-const sessionStatusCopy: Record<NonNullable<SessionData['status']>, string> = {
-  flowing: '进展顺畅',
-  exploring: '正在探索',
-  stuck: '可能卡住',
-  idle: '暂时停顿',
-  milestone: '到达里程碑',
-  done: '学习完成',
-};
-
-export function formatTime(date?: Date): string {
-  if (!date) return '刚刚';
-  return new Intl.DateTimeFormat('zh-CN', {
+export function formatTime(date: Date | undefined, language: Language): string {
+  if (!date) return language === 'zh' ? '刚刚' : 'Just now';
+  return new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -169,8 +165,10 @@ export function formatTime(date?: Date): string {
 }
 
 function SessionListSkeleton() {
+  const { copy } = useI18n();
+
   return (
-    <div className="session-list" aria-label="正在加载会话">
+    <div className="session-list" aria-label={copy.home.loadingSessions}>
       {[0, 1, 2].map((item) => (
         <div className="session-card skeleton-card" key={item}>
           <span className="skeleton-line skeleton-short" />
